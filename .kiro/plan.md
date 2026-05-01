@@ -151,19 +151,42 @@ Example JSON shape:
 ```json
 {
   "scenario": "rfi.btn",
-  "sizing": { "openBB": 2.5 },
-  "entries": {
-    "AA":  { "type": "pure",  "action": "open" },
-    "AKs": { "type": "pure",  "action": "open" },
-    "A5s": { "type": "mixed", "aggressive": "open", "passive": "fold" },
-    "22":  { "type": "pure",  "action": "open" },
-    "72o": { "type": "pure",  "action": "fold" }
-  }
+  "chartType": "rfi",
+  "openSize": "2.5bb",
+  "range": "22+, A2s+, K5s+, Q7s+, J7s+, T7s+, 96s+, 85s+, 74s+, 64s+, 54s, A2o+, K9o+, Q9o+, J9o, T9o"
 }
 ```
 
-Unspecified hand classes default to `{"type": "pure", "action": "fold"}`, so
-source JSON only needs to list non-fold hands.
+**Range-string format** (industry standard, matches PokerTracker / GTO Wizard
+export). Comma-separated tokens, each token is one of:
+
+- Explicit hand class: `AA`, `AKs`, `AKo`, `72o`.
+- `XX+` (pair and up): `22+` = `22,33,...,AA`.
+- `XYs+` (suited, same higher card, all lower kickers at Y or higher):
+  `A2s+` = `A2s,A3s,...,AKs`; `K9s+` = `K9s,KTs,KJs,KQs`.
+- `XYo+` (offsuit, same rule): `A2o+`, `K9o+`, etc.
+
+**Notation conventions** (from owner's chart legend — applied at source):
+
+- "Suited N's+" — suited hands with lower card rank ≥ N.
+- "Suited N's" (no `+`) — suited hands with lower card rank exactly N.
+- "Offsuited N's+" / "Offsuited N's" — same convention, offsuit.
+- Sidebar shorthand like `76s+` may include one-gappers (`76s+` → 76s, 87s,
+  98s, T9s, 97s). At the JSON level we **always expand into explicit tokens**
+  to avoid parser ambiguity.
+
+Defense charts (later) use two range fields:
+
+```json
+{
+  "scenario": "def.btn.vs.utg",
+  "chartType": "defense",
+  "threeBet": "JJ+, AKs, AKo, ...",
+  "call": "TT, 99, AQs, KQs, ..."
+}
+```
+
+Everything not listed in any action field defaults to fold.
 
 **ChartRepository**
 - `func allCharts() -> [Chart]` — loads all bundled JSON at startup.
