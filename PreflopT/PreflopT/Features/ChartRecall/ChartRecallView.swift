@@ -53,24 +53,21 @@ struct ChartRecallView: View {
     }
 
     private func gradedHeader(_ result: ChartRecallResult) -> some View {
-        let accuracyPct = Int((result.accuracy * 100).rounded())
-        return VStack(alignment: .leading, spacing: 6) {
-            Text("\(accuracyPct)% correct")
-                .font(.title2.weight(.semibold))
-            HStack(spacing: 12) {
-                Label("\(result.correctCount)", systemImage: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
-                if result.missedCount > 0 {
-                    Label("\(result.missedCount) missed", systemImage: "circle.dotted")
-                        .foregroundStyle(.orange)
-                }
-                if result.wrongExtraCount > 0 {
-                    Label("\(result.wrongExtraCount) extra", systemImage: "xmark.circle.fill")
-                        .foregroundStyle(.red)
-                }
+        HStack(spacing: 12) {
+            if result.missedCount > 0 {
+                Label("\(result.missedCount) missed", systemImage: "xmark.circle.fill")
+                    .foregroundStyle(.orange)
             }
-            .font(.caption)
+            if result.wrongExtraCount > 0 {
+                Label("\(result.wrongExtraCount) extra", systemImage: "xmark.circle.fill")
+                    .foregroundStyle(.red)
+            }
+            if result.missedCount == 0 && result.wrongExtraCount == 0 {
+                Label("Perfect", systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+            }
         }
+        .font(.subheadline.weight(.medium))
     }
 
     // MARK: - Grid
