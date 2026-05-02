@@ -103,41 +103,29 @@ struct ChartRecallView: View {
 
     private func gradedStyle(for hand: HandClass, result: ChartRecallResult) -> HandCellStyle {
         let expected = viewModel.chart.action(for: hand)
-        let expectedFill = ActionPalette.fill(for: expected)
-        let expectedForeground = ActionPalette.foreground(for: expected)
+
+        // Semantic colors for the graded view (independent of action palette):
+        //   green  = correct non-fold answer
+        //   orange = missed (chart wanted this hand, user folded)
+        //   red    = extra  (user played this, chart says fold)
+        let correctGreen = Color(red: 0.22, green: 0.70, blue: 0.35)
+        let missedOrange = Color(red: 0.95, green: 0.62, blue: 0.10)
+        let wrongRed     = Color(red: 0.92, green: 0.30, blue: 0.30)
+        let foldFill     = ActionPalette.fill(for: .fold)
+        let foldFg       = ActionPalette.foreground(for: .fold)
 
         switch result.grades[hand] {
+        case .correct where !expected.contains(.fold):
+            return HandCellStyle(fill: correctGreen, foreground: .white)
         case .correct:
-            return HandCellStyle(
-                fill: expectedFill,
-                foreground: expectedForeground,
-                overlay: expected.contains(.fold) ? nil : .correct
-            )
+            // Correct fold: keep neutral, no overlay.
+            return HandCellStyle(fill: foldFill, foreground: foldFg)
         case .missed:
-            // Show the correct color but mark it as missed so it's obvious
-            // the user didn't paint it.
-            return HandCellStyle(
-                fill: expectedFill.opacity(0.55),
-                foreground: expectedForeground,
-                overlay: .missed
-            )
-        case .wrongExtra(let answered):
-            return HandCellStyle(
-                fill: ActionPalette.fill(for: answered).opacity(0.85),
-                foreground: ActionPalette.foreground(for: answered),
-                overlay: .wrong
-            )
-        case .wrongAction(let answered, _):
-            return HandCellStyle(
-                fill: ActionPalette.fill(for: answered).opacity(0.85),
-                foreground: ActionPalette.foreground(for: answered),
-                overlay: .wrong
-            )
+            return HandCellStyle(fill: missedOrange, foreground: .white, overlay: nil)
+        case .wrongExtra, .wrongAction:
+            return HandCellStyle(fill: wrongRed, foreground: .white, overlay: nil)
         case .none:
-            return HandCellStyle(
-                fill: ActionPalette.fill(for: .fold),
-                foreground: ActionPalette.foreground(for: .fold)
-            )
+            return HandCellStyle(fill: foldFill, foreground: foldFg)
         }
     }
 
