@@ -16,11 +16,21 @@ struct ChartDetailView: View {
             VStack(alignment: .leading, spacing: 16) {
                 header
 
-                HandGridView(entries: chart.entries)
+                HandGridView.readOnly(entries: chart.entries)
                     .padding(.horizontal)
 
                 legend
                     .padding(.horizontal)
+
+                NavigationLink {
+                    ChartRecallView(chart: chart)
+                } label: {
+                    Label("Practice: Chart Recall", systemImage: "pencil.and.list.clipboard")
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
+                }
+                .buttonStyle(.borderedProminent)
+                .padding(.horizontal)
 
                 Spacer(minLength: 0)
             }
