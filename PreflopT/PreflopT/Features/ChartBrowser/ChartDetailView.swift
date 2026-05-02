@@ -76,11 +76,11 @@ struct ChartDetailView: View {
                     foreground: ActionPalette.foreground(for: action)
                 )
             } else {
-                // Blind view: uniform neutral cells, no hand labels, so the
-                // user can try to recall without visual hints.
+                // Blind view: neutral cells with labels still visible, so the
+                // user can see what hand each cell is without the color hint.
                 return HandCellStyle(
                     fill: Color(.systemGray5),
-                    foreground: .clear
+                    foreground: .primary.opacity(0.8)
                 )
             }
         }
