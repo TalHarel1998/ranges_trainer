@@ -32,6 +32,31 @@ public struct Chart: Sendable {
     public func action(for hand: HandClass) -> ChartAction {
         entries[hand] ?? .pure(.fold)
     }
+
+    /// Number of hand classes (0..169) for which this chart includes the
+    /// given action.
+    public func handClassCount(containing action: Action) -> Int {
+        entries.values.reduce(into: 0) { count, ca in
+            if ca.contains(action) { count += 1 }
+        }
+    }
+
+    /// Number of 2-card combos (0..1326) for which this chart includes the
+    /// given action. A pair contributes 6 combos, a suited hand class 4,
+    /// an offsuit hand class 12.
+    public func comboCount(containing action: Action) -> Int {
+        entries.reduce(into: 0) { partial, entry in
+            if entry.value.contains(action) {
+                partial += entry.key.comboCount
+            }
+        }
+    }
+
+    /// Fraction in [0, 1] of all 1326 combos for which this chart includes
+    /// the given action.
+    public func fractionOfCombos(containing action: Action) -> Double {
+        Double(comboCount(containing: action)) / 1326.0
+    }
 }
 
 // MARK: - JSON DTO + decoding

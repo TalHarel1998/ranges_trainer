@@ -41,6 +41,19 @@ public struct HandClass: Hashable, Sendable {
     /// True for non-pair, non-suited hands.
     public var isOffsuit: Bool { !isPair && !isSuited }
 
+    /// Number of specific 2-card combos that fall under this hand class.
+    ///
+    ///   Pair   → 6 combos  (C(4,2))
+    ///   Suited → 4 combos  (one per suit)
+    ///   Offsuit→ 12 combos (4 × 3)
+    ///
+    /// Summed across all 169 hand classes this equals the full 1326 unique
+    /// two-card combinations from a 52-card deck.
+    public var comboCount: Int {
+        if isPair { return 6 }
+        return isSuited ? 4 : 12
+    }
+
     /// Canonical 2- or 3-character string: `"AA"`, `"AKs"`, `"AKo"`.
     public var symbol: String {
         if isPair { return "\(high.symbol)\(low.symbol)" }
