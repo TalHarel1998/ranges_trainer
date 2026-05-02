@@ -300,40 +300,81 @@ ranges_trainer/
 
 ## 6. Roadmap
 
-### Phase 0 — Setup
+### Phase 0 — Setup ✅
 - [x] Init git, push private repo.
 - [x] Install full Xcode.
-- [ ] Create Xcode project (SwiftUI app, iOS 17+ target, name `PreflopT`).
-- [ ] First build to simulator. Commit, push.
+- [x] Create Xcode project (SwiftUI app, iOS 17+ target, name `PreflopT`).
+- [x] First build to simulator. Commit, push.
 
-### Phase 1 — Domain model + tests
-- [ ] Implement `Card`, `HandClass`, `Position`, `Action`, `Scenario`,
-      `ChartAction`, `Chart`.
-- [ ] Unit tests: 169 hand classes enumerated, `HoleCards → HandClass` mapping,
-      canonical string parsing, two-black-cards resolution, grading logic.
+### Phase 1 — Domain model + tests ✅
+- [x] Implement `Card`, `HoleCards`, `Rank`, `Suit`.
+- [x] Implement `HandClass` (169 hand classes, symbol round-trip, Codable,
+      `HoleCards → HandClass`).
+- [x] Implement `RangeString` parser (industry-standard `"22+, A2s+, ..."`).
+- [x] Implement `Position`, `Action`, `ChartAction` (pure + mixed), `Scenario`,
+      `Chart`, `HandGridPosition`.
+- [x] Unit tests: ranks/suits, 169-hand enumeration, range parser (incl. the
+      real RFI range strings with exact hand counts), two-black-cards
+      resolution, scenario key round-trips, grid coordinates.
 
-### Phase 2 — Chart data import (RFI)
-- [ ] Finalize JSON schema (draft done in §4.2).
-- [ ] Convert owner's RFI charts into 5 JSON files under `Charts/rfi/`.
-      (One at a time, driven from Google Sheets snapshots.)
-- [ ] `ChartRepository` loads + decodes all bundled charts at startup.
-- [ ] Tests: every expected scenario loads; unspecified cells default to fold.
+### Phase 2 — Chart data import (RFI) ✅
+- [x] JSON schema finalized (range-string format, §4.2).
+- [x] All 5 RFI charts authored: UTG (39), MP (48), CO (64), BTN (84),
+      SB (84, same as BTN).
+- [x] `BundledChartRepository` loads all bundled JSON at startup via an
+      explicit manifest (filename → scenario-key).
+- [x] Tests: every expected scenario loads; UTG ⊂ MP ⊂ CO ⊂ BTN; unspecified
+      cells default to fold; SB matches BTN.
 
-### Phase 3 — Chart browser
-- [ ] `HandGridView` (13×13, AA top-left → 22 bottom-right, color per action,
-      split colors for mixed cells).
-- [ ] Scenario list → read-only chart display.
+### Phase 3 — Chart browser ✅
+- [x] `HandGridView` (13×13, AA top-left → 22 bottom-right, generic style
+      closure, drag-to-paint gesture).
+- [x] `ChartBrowserView` lists RFI scenarios in position order, with combo
+      counts.
+- [x] `ChartDetailView` shows the grid with a Show/Hide toggle (hidden view
+      keeps cell labels but removes action color), a combo-percentage legend
+      (Open X.X% / Fold Y.Y%), and a Practice button.
+- [x] `AppContainer` + environment plumbing for the repository.
 
-### Phase 4 — Chart Recall mode (RFI)
-- [ ] Action palette + tap + drag-to-paint interaction (see §4.6).
-- [ ] Submit → diff view with per-cell correctness and summary score.
+### Phase 4 — Chart Recall mode (RFI) ✅
+- [x] Action palette; tap-to-set and drag-to-paint via a single shared gesture.
+- [x] `ChartRecallViewModel` with `painting` / `graded` phases.
+- [x] `ChartRecallGrading` (pure): 4 outcomes per cell
+      (`correct` / `missed` / `wrongExtra` / `wrongAction`) + summary counts.
+- [x] Diff view: semantic cell colors at a glance —
+      green = correct non-fold, orange = missed, red = extra,
+      grey = correct fold.
+- [x] Header shows only `missed` and `extra` counts (and `Perfect` when both
+      are zero); `% correct` removed since correct-folds inflate it.
 
-### Phase 5 — Situation Drill mode (RFI)
-- [ ] Card renderer (`CardView`).
-- [ ] Question generator: random `HoleCards` + random enabled RFI scenario.
-- [ ] Answer buttons: Fold / Open.
-- [ ] Grading uses two-black-cards rule for mixed hands.
-- [ ] Immediate feedback, next-question flow, session summary.
+### Phase 5 — Situation Drill mode (RFI) — next
+- [ ] `CardView` SwiftUI component: rank + suit, colored by suit
+      (♥♦ red, ♠♣ black).
+- [ ] `SituationDrillViewModel`
+  - [ ] Config: which scenarios are in the pool (default = all 5 RFI).
+  - [ ] Question generator: pick a random scenario, then two random distinct
+        cards from 52.
+  - [ ] State machine: `question(Question)` → `feedback(Feedback)` → next.
+  - [ ] Expose current question, streak, session counts, recent-answer history.
+- [ ] `SituationDrillView`
+  - [ ] Show dealt cards and a scenario caption (e.g., "BTN, first to act").
+  - [ ] Two answer buttons for RFI: **Fold** / **Open**.
+  - [ ] On answer: color the chosen button green/red and show the correct
+        action if wrong.
+  - [ ] "Next" button (or tap-to-advance).
+  - [ ] Session summary sheet on exit: answered, % correct, weakest hand
+        classes in this session.
+- [ ] Grading calls `ChartAction.resolve(for:)` so mixed cells are graded
+      deterministically via the two-black-cards rule (no mixed cells in RFI
+      data today, but wired up for v1.1 defense).
+- [ ] Entry point: a "Practice: Situation Drill" button on `ChartDetailView`
+      (locked to that scenario) **and** a top-level "Drill all RFI" entry
+      from the browser.
+- [ ] Unit tests
+  - [ ] Question generator never produces identical cards.
+  - [ ] Grading for a `pure(.open)` cell with `.open` answer → correct;
+        with `.fold` → wrong.
+  - [ ] Grading for a `mixed` cell respects the two-black-cards rule.
 
 ### Phase 6 — Stats & persistence
 - [ ] SwiftData schema (`SessionRecord`, `AnswerRecord`).
@@ -348,10 +389,11 @@ ranges_trainer/
 
 ### v1.1 — Defense
 - [ ] Add defense charts (BTN vs UTG/MP/CO, SB vs UTG/MP/CO/BTN).
-- [ ] Extend `Action` palette to include Call and 3-Bet in defense flows.
+- [ ] Extend `Action` palette in UI to include Call and 3-Bet.
+- [ ] Chart Recall action palette picker (currently hardcoded to Open for RFI).
 
 ### v1.2 — vs 3-Bet / vs 4-Bet
-- [ ] Add vs_3bet charts and 4-Bet action.
+- [ ] Add vs_3bet charts and 4-Bet action flows.
 - [ ] Add vs_4bet charts.
 
 ### v2 ideas (not committed)
@@ -363,12 +405,28 @@ ranges_trainer/
 ## 7. Decisions log
 
 - **Scope:** RFI only in v1. Defense, vs 3-Bet, vs 4-Bet deferred to v1.1/v1.2.
-- **Data format:** one JSON file per chart, organized into
-  `rfi/`, `defense/`, `vs_3bet/`, `vs_4bet/` under `Resources/Charts/`.
+- **Data format:** one JSON file per chart using the industry-standard
+  range-string format (§4.2). One-gapper shorthand expanded to explicit
+  tokens at the JSON level. Files live at the bundle root (Xcode's
+  synchronized group flattens resource folders).
 - **Mixed frequencies:** deterministic via the two-black-cards rule (§4.5).
-  Unusual mixes handled manually in the JSON.
+  Unusual mixes handled manually in the JSON. No mixed cells in RFI data.
 - **BB RFI:** excluded (BB never opens).
+- **BTN vs SB:** identical ranges per the source chart; shipped as two
+  distinct JSON files (same `range` string) since the app treats them as
+  distinct scenarios.
 - **iOS target:** 17+ (owner's device runs iOS 26).
-- **Chart Recall interaction:** tap-to-paint with drag support, bottom-right 22
-  to top-left AA (§4.6).
+- **Chart Recall interaction:** tap-to-set with drag-to-paint support. 22 in
+  the bottom-right, AA in the top-left (§4.6).
+- **Chart Recall scoring:** the graded header shows **only** `missed` and
+  `extra` counts (plus a `Perfect` state when both are zero). A single
+  "% correct" metric was removed because correct-folds dominate any percentage
+  for tight RFI ranges.
+- **Chart Detail UI:** minimal header (no hero long-name / hand count / open
+  size line). Show/Hide toggle blanks the color but keeps hand labels.
+  Legend shows Open and Fold combo percentages (of 1326 total combos).
+- **Browser row metric:** combo count (out of 1326), not hand-class count.
 - **Polish / icon / launch screen:** deferred to Phase 7, after core flows work.
+- **Test-output visibility:** use `xcrun xcresulttool get test-results tests`
+  to inspect test failures — `xcodebuild`'s console output truncates
+  Swift Testing assertion details.
