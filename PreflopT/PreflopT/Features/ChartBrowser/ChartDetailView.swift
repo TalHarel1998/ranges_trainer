@@ -2,8 +2,9 @@
 //  ChartDetailView.swift
 //  PreflopT
 //
-//  Read-only view of a single chart: metadata header, the 13×13 grid, and
-//  a compact action legend.
+//  Read-only view of a single chart: the 13×13 grid with a Show/Hide toggle,
+//  a compact per-action legend with combo percentages, and a Practice
+//  navigation target.
 //
 
 import SwiftUI
@@ -11,16 +12,29 @@ import SwiftUI
 struct ChartDetailView: View {
     let chart: Chart
 
+    @State private var isRevealed = false
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                header
-
-                HandGridView.readOnly(entries: chart.entries)
+                grid
                     .padding(.horizontal)
 
                 legend
                     .padding(.horizontal)
+
+                Button {
+                    withAnimation(.snappy) { isRevealed.toggle() }
+                } label: {
+                    Label(
+                        isRevealed ? "Hide" : "Show",
+                        systemImage: isRevealed ? "eye.slash" : "eye"
+                    )
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 6)
+                }
+                .buttonStyle(.bordered)
+                .padding(.horizontal)
 
                 NavigationLink {
                     ChartRecallView(chart: chart)
@@ -40,6 +54,8 @@ struct ChartDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
     }
 
+    // MARK: - Title
+
     private var title: String {
         switch chart.scenario.priorAction {
         case .firstToAct:
@@ -49,47 +65,65 @@ struct ChartDetailView: View {
         }
     }
 
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(chart.scenario.hero.displayName)
-                .font(.title3.weight(.semibold))
-            HStack(spacing: 8) {
-                Label("\(openCount) hands", systemImage: "hand.raised")
-                if let size = chart.openSize {
-                    Text("· Open \(size)")
-                }
-                if let note = chart.note, !note.isEmpty {
-                    Text("· \(note)")
-                        .lineLimit(2)
-                }
+    // MARK: - Grid
+
+    private var grid: some View {
+        HandGridView { hand in
+            if isRevealed {
+                let action = chart.entries[hand] ?? .pure(.fold)
+                return HandCellStyle(
+                    fill: ActionPalette.fill(for: action),
+                    foreground: ActionPalette.foreground(for: action)
+                )
+            } else {
+                // Blind view: uniform neutral cells, no hand labels, so the
+                // user can try to recall without visual hints.
+                return HandCellStyle(
+                    fill: Color(.systemGray5),
+                    foreground: .clear
+                )
             }
-            .font(.caption)
-            .foregroundStyle(.secondary)
         }
-        .padding(.horizontal)
     }
+
+    // MARK: - Legend with combo percentages
 
     private var legend: some View {
-        HStack(spacing: 16) {
-            actionSwatch(.open, label: "Open")
-            actionSwatch(.fold, label: "Fold")
+        let openFraction = chart.fractionOfCombos(containing: .open)
+        let foldFraction = 1.0 - openFraction
+        return HStack(spacing: 16) {
+            legendSwatch(
+                color: ActionPalette.fill(for: .open),
+                label: "Open",
+                percent: openFraction
+            )
+            legendSwatch(
+                color: ActionPalette.fill(for: .fold),
+                label: "Fold",
+                percent: foldFraction
+            )
             Spacer()
         }
-        .font(.caption)
+        .font(.subheadline)
     }
 
-    private func actionSwatch(_ action: Action, label: String) -> some View {
+    private func legendSwatch(color: Color, label: String, percent: Double) -> some View {
         HStack(spacing: 6) {
             RoundedRectangle(cornerRadius: 3)
-                .fill(ActionPalette.fill(for: action))
-                .frame(width: 14, height: 14)
+                .fill(color)
+                .frame(width: 16, height: 16)
             Text(label)
+                .foregroundStyle(.primary)
+            Text(Self.format(percent))
                 .foregroundStyle(.secondary)
+                .monospacedDigit()
         }
     }
 
-    private var openCount: Int {
-        chart.entries.values.filter { $0.contains(.open) }.count
+    private static func format(_ fraction: Double) -> String {
+        // One decimal place, e.g. "16.3%". Clamp tiny values to avoid "0.0%".
+        let pct = fraction * 100
+        return String(format: "%.1f%%", pct)
     }
 }
 
