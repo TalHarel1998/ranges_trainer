@@ -69,15 +69,16 @@ private struct ChartRow: View {
                 }
             }
             Spacer()
-            Text("\(openCount) hands")
+            Text("\(openCombos) combos")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .monospacedDigit()
         }
         .padding(.vertical, 4)
     }
 
-    private var openCount: Int {
-        chart.entries.values.filter { $0.contains(.open) }.count
+    private var openCombos: Int {
+        chart.comboCount(containing: .open)
     }
 }
 
