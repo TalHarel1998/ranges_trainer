@@ -1,0 +1,7 @@
+{
+  "scenario": "def.btn.vs.co",
+  "chartType": "defense",
+  "threeBet": "AA, KK, QQ, JJ, AKs, AQs, Q9s, AKo",
+  "mixed3betCall": "AJs, ATs, A9s, A8s, A7s, A6s, A5s, A4s, A3s, KQs, KJs, KTs, K9s, QJs, QTs, JTs, J9s, TT, T9s, T8s, 99, 98s, 88, 87s, 77, 66, 55, 65s, AQo, KQo, AJo",
+  "call": ""
+}

@@ -1,0 +1,7 @@
+{
+  "scenario": "def.btn.vs.utg",
+  "chartType": "defense",
+  "threeBet": "AA, KK, QQ, AKs, AQs, QJs, AKo",
+  "mixed3betCall": "AJs, ATs, A9s, A8s, A5s, A4s, KQs, KJs, KTs, K9s, QTs, JJ, JTs, J9s, TT, T9s, 99, 88, 77, 66, 65s, AQo, KQo",
+  "call": ""
+}
