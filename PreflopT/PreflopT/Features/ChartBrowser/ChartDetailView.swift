@@ -76,8 +76,6 @@ struct ChartDetailView: View {
                     foreground: ActionPalette.foreground(for: action)
                 )
             } else {
-                // Blind view: neutral cells with labels still visible, so the
-                // user can see what hand each cell is without the color hint.
                 return HandCellStyle(
                     fill: Color(.systemGray5),
                     foreground: .primary.opacity(0.8)
@@ -88,48 +86,71 @@ struct ChartDetailView: View {
 
     // MARK: - Legend with combo percentages
 
+    /// Actions to display in the legend, in order. Driven by the scenario
+    /// so RFI charts show Open/Fold and defense charts show 3-Bet/Call/Fold.
+    private var legendActions: [Action] {
+        switch chart.scenario.priorAction {
+        case .firstToAct:
+            return [.open, .fold]
+        case .facingOpen:
+            return [.threeBet, .call, .fold]
+        }
+    }
+
     private var legend: some View {
-        let openFraction = chart.fractionOfCombos(containing: .open)
-        let foldFraction = 1.0 - openFraction
-        return HStack(spacing: 16) {
-            legendSwatch(
-                color: ActionPalette.fill(for: .open),
-                label: "Open",
-                percent: openFraction
-            )
-            legendSwatch(
-                color: ActionPalette.fill(for: .fold),
-                label: "Fold",
-                percent: foldFraction
-            )
+        HStack(spacing: 16) {
+            ForEach(legendActions, id: \.self) { action in
+                legendSwatch(action: action)
+            }
             Spacer()
         }
         .font(.subheadline)
     }
 
-    private func legendSwatch(color: Color, label: String, percent: Double) -> some View {
+    private func legendSwatch(action: Action) -> some View {
         HStack(spacing: 6) {
             RoundedRectangle(cornerRadius: 3)
-                .fill(color)
+                .fill(ActionPalette.fill(for: action))
                 .frame(width: 16, height: 16)
-            Text(label)
+            Text(label(for: action))
                 .foregroundStyle(.primary)
-            Text(Self.format(percent))
+            Text(Self.format(fraction(for: action)))
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
         }
     }
 
+    /// Fraction of combos in the chart for a given action. For the Fold row
+    /// we compute the complement since our chart model doesn't store folds
+    /// explicitly.
+    private func fraction(for action: Action) -> Double {
+        if action == .fold {
+            // Fold fraction = 1 - sum(other action fractions)
+            let nonFoldActions = legendActions.filter { $0 != .fold }
+            let nonFoldSum = nonFoldActions.reduce(0.0) { $0 + chart.fractionOfCombos(containing: $1) }
+            return max(0, 1.0 - nonFoldSum)
+        }
+        return chart.fractionOfCombos(containing: action)
+    }
+
+    private func label(for action: Action) -> String {
+        switch action {
+        case .fold:     return "Fold"
+        case .call:     return "Call"
+        case .open:     return "Open"
+        case .threeBet: return "3-Bet"
+        case .fourBet:  return "4-Bet"
+        }
+    }
+
     private static func format(_ fraction: Double) -> String {
-        // One decimal place, e.g. "16.3%". Clamp tiny values to avoid "0.0%".
-        let pct = fraction * 100
-        return String(format: "%.1f%%", pct)
+        String(format: "%.1f%%", fraction * 100)
     }
 }
 
-#Preview("BTN RFI") {
+#Preview("BTN vs UTG") {
     let repo = try! BundledChartRepository()
-    let chart = repo.chart(for: Scenario(hero: .btn, priorAction: .firstToAct))!
+    let chart = repo.chart(for: Scenario(hero: .btn, priorAction: .facingOpen(from: .utg)))!
     return NavigationStack {
         ChartDetailView(chart: chart)
     }
