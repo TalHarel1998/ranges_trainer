@@ -44,10 +44,21 @@ public struct Chart: Sendable {
     /// Number of 2-card combos (0..1326) for which this chart includes the
     /// given action. A pair contributes 6 combos, a suited hand class 4,
     /// an offsuit hand class 12.
+    ///
+    /// For a `.mixed` chart action, this counts combos that resolve to the
+    /// given action under the two-black-cards rule (per `HandClass.combos`).
     public func comboCount(containing action: Action) -> Int {
         entries.reduce(into: 0) { partial, entry in
-            if entry.value.contains(action) {
-                partial += entry.key.comboCount
+            let (hand, chartAction) = entry
+            switch chartAction {
+            case .pure(let a):
+                if a == action { partial += hand.comboCount }
+            case .mixed(let aggressive, let passive):
+                if aggressive == action {
+                    partial += hand.bothBlackComboCount
+                } else if passive == action {
+                    partial += hand.comboCount - hand.bothBlackComboCount
+                }
             }
         }
     }
@@ -78,10 +89,14 @@ public struct Chart: Sendable {
 /// {
 ///   "scenario": "def.btn.vs.utg",
 ///   "chartType": "defense",
-///   "threeBet": "JJ+, AKs, AKo, ...",
-///   "call": "TT, AQs, KQs, ..."
+///   "threeBet":      "AA, KK, AKs, AKo",          // pure 3-bet
+///   "mixed3betCall": "AJs, ATs, A9s, ...",         // mixed 3-bet / call
+///   "call":          ""                            // pure call (rare)
 /// }
 /// ```
+///
+/// `mixed3betCall` entries produce `.mixed(aggressive: .threeBet, passive: .call)`
+/// chart actions, resolved per-combo at grade time via the two-black-cards rule.
 ///
 /// The DTO accepts both shapes and converts to a `Chart` via
 /// `toDomainChart()`. Unknown fields are ignored.
@@ -96,6 +111,7 @@ struct ChartDTO: Decodable {
 
     // Defense
     let threeBet: String?
+    let mixed3betCall: String?
     let call: String?
     let fourBet: String?  // for future vs-3bet charts
 
@@ -111,6 +127,7 @@ struct ChartDTO: Decodable {
         case missingRequiredField(chartType: String, field: String)
         case invalidScenarioKey(String)
         case rangeParseFailure(field: String, underlying: Error)
+        case overlappingRanges(chartType: String, hand: String, fields: [String])
 
         var description: String {
             switch self {
@@ -122,6 +139,8 @@ struct ChartDTO: Decodable {
                 return "Invalid scenario key: '\(key)'"
             case .rangeParseFailure(let field, let underlying):
                 return "Failed to parse range in field '\(field)': \(underlying)"
+            case .overlappingRanges(let type, let hand, let fields):
+                return "Hand '\(hand)' appears in multiple \(type) fields: \(fields.joined(separator: ", "))"
             }
         }
     }
@@ -148,15 +167,23 @@ struct ChartDTO: Decodable {
             for h in hands { entries[h] = .pure(.open) }
 
         case .defense:
-            let threeBetHands = try expand(threeBet ?? "", field: "threeBet")
-            let callHands = try expand(call ?? "", field: "call")
-            for h in threeBetHands { entries[h] = .pure(.threeBet) }
-            for h in callHands {
-                // If a hand appears in both, the more aggressive action wins
-                // for the primary entry. Overlap is treated as a data bug but
-                // not a fatal one.
-                if entries[h] == nil { entries[h] = .pure(.call) }
+            let pureThreeBet = try expand(threeBet ?? "", field: "threeBet")
+            let mixed        = try expand(mixed3betCall ?? "", field: "mixed3betCall")
+            let pureCall     = try expand(call ?? "", field: "call")
+
+            if let dup = firstOverlap(among: [
+                ("threeBet", pureThreeBet),
+                ("mixed3betCall", mixed),
+                ("call", pureCall),
+            ]) {
+                throw DecodeError.overlappingRanges(
+                    chartType: chartType, hand: dup.hand, fields: dup.fields
+                )
             }
+
+            for h in pureThreeBet { entries[h] = .pure(.threeBet) }
+            for h in mixed { entries[h] = .mixed(aggressive: .threeBet, passive: .call) }
+            for h in pureCall { entries[h] = .pure(.call) }
 
         case .vs3bet:
             let fourBetHands = try expand(fourBet ?? "", field: "fourBet")
@@ -185,5 +212,22 @@ struct ChartDTO: Decodable {
         } catch {
             throw DecodeError.rangeParseFailure(field: field, underlying: error)
         }
+    }
+
+    /// Find the first hand that appears in two or more of the provided named
+    /// sets. Returns nil if all sets are disjoint.
+    private func firstOverlap(
+        among groups: [(name: String, set: Set<HandClass>)]
+    ) -> (hand: String, fields: [String])? {
+        var seenIn: [HandClass: [String]] = [:]
+        for group in groups {
+            for hand in group.set {
+                seenIn[hand, default: []].append(group.name)
+            }
+        }
+        for (hand, names) in seenIn where names.count > 1 {
+            return (hand.symbol, names)
+        }
+        return nil
     }
 }

@@ -54,6 +54,21 @@ public struct HandClass: Hashable, Sendable {
         return isSuited ? 4 : 12
     }
 
+    /// Number of specific combos within this hand class where **both** hole
+    /// cards are black (♠ or ♣).
+    ///
+    ///   Pair   → 1 combo  (only the ♠-♣ pair; the ♠♣ pair counts once)
+    ///   Suited → 2 combos (A♠K♠, A♣K♣)
+    ///   Offsuit→ 2 combos (one each way: A♠K♣, A♣K♠)
+    ///
+    /// Used by the two-black-cards rule to compute the combo breakdown of a
+    /// mixed chart cell (combos where `areBothBlack == true` take the
+    /// aggressive leg; the rest take the passive leg).
+    public var bothBlackComboCount: Int {
+        if isPair { return 1 }
+        return isSuited ? 2 : 2
+    }
+
     /// Canonical 2- or 3-character string: `"AA"`, `"AKs"`, `"AKo"`.
     public var symbol: String {
         if isPair { return "\(high.symbol)\(low.symbol)" }
