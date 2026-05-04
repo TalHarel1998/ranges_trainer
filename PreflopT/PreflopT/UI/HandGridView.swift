@@ -41,19 +41,20 @@ enum ActionPalette {
         switch chartAction {
         case .pure(let a):
             return fill(for: a)
-        case .mixed(_, let passive):
-            // Visually distinguish mixed cells from pure-aggressive cells by
-            // using the passive leg's color. For a 3-bet/call mix this is
-            // blue (Call), so pure 3-bets are red and mixed cells are blue.
-            return fill(for: passive)
+        case .mixed:
+            // All mixed cells render with the call-blue color to visually
+            // distinguish them from pure 3-bet (red) and pure fold (grey),
+            // regardless of whether the passive leg is call or fold.
+            return fill(for: .call)
         }
     }
 
     /// Foreground (text) color that stays legible on top of `fill(for:)`.
     static func foreground(for chartAction: ChartAction) -> Color {
         switch chartAction {
-        case .pure(.fold): return .primary.opacity(0.8)
-        default:           return .white
+        case .pure(.fold):  return .primary.opacity(0.8)
+        case .pure:         return .white
+        case .mixed:        return .white
         }
     }
 
