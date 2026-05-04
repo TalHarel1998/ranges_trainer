@@ -112,6 +112,7 @@ struct ChartDTO: Decodable {
     // Defense
     let threeBet: String?
     let mixed3betCall: String?
+    let mixed3betFold: String?
     let call: String?
     let fourBet: String?  // for future vs-3bet charts
 
@@ -168,12 +169,14 @@ struct ChartDTO: Decodable {
 
         case .defense:
             let pureThreeBet = try expand(threeBet ?? "", field: "threeBet")
-            let mixed        = try expand(mixed3betCall ?? "", field: "mixed3betCall")
+            let mixedCall    = try expand(mixed3betCall ?? "", field: "mixed3betCall")
+            let mixedFold    = try expand(mixed3betFold ?? "", field: "mixed3betFold")
             let pureCall     = try expand(call ?? "", field: "call")
 
             if let dup = firstOverlap(among: [
                 ("threeBet", pureThreeBet),
-                ("mixed3betCall", mixed),
+                ("mixed3betCall", mixedCall),
+                ("mixed3betFold", mixedFold),
                 ("call", pureCall),
             ]) {
                 throw DecodeError.overlappingRanges(
@@ -182,7 +185,8 @@ struct ChartDTO: Decodable {
             }
 
             for h in pureThreeBet { entries[h] = .pure(.threeBet) }
-            for h in mixed { entries[h] = .mixed(aggressive: .threeBet, passive: .call) }
+            for h in mixedCall { entries[h] = .mixed(aggressive: .threeBet, passive: .call) }
+            for h in mixedFold { entries[h] = .mixed(aggressive: .threeBet, passive: .fold) }
             for h in pureCall { entries[h] = .pure(.call) }
 
         case .vs3bet:
