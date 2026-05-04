@@ -1,0 +1,7 @@
+{
+  "scenario": "def.sb.vs.co",
+  "chartType": "defense",
+  "threeBet": "AA, KK, QQ, JJ, TT, 99, 88, AKs, AQs, AJs, ATs, A9s, A5s, KQs, KJs, KTs, QJs, QTs, JTs, T9s, AKo, AQo",
+  "mixed3betFold": "A8s, A4s, K9s, 77, KQo",
+  "call": ""
+}

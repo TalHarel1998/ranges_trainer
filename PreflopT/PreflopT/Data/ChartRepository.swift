@@ -55,6 +55,7 @@ public final class BundledChartRepository: ChartRepository {
         ("btn_vs_utg", "def.btn.vs.utg"),
         ("btn_vs_co",  "def.btn.vs.co"),
         ("sb_vs_utg",  "def.sb.vs.utg"),
+        ("sb_vs_co",   "def.sb.vs.co"),
         ("sb_vs_btn",  "def.sb.vs.btn"),
     ]
 
