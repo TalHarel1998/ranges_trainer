@@ -77,4 +77,50 @@ struct DefenseBBTests {
         #expect(action.resolve(for: bothBlack) == .threeBet)
         #expect(action.resolve(for: mixedSuits) == .call)
     }
+
+    // MARK: - BB vs BTN
+
+    @Test func bbVsBtnLoads() throws {
+        let repo = try #require(Self.repo())
+        let c = try #require(repo.chart(for: Scenario(hero: .bb, priorAction: .facingOpen(from: .btn))))
+        #expect(c.scenario.key == "def.bb.vs.btn")
+    }
+
+    @Test func bbVsBtnBucketCounts() throws {
+        let repo = try #require(Self.repo())
+        let c = try #require(repo.chart(for: Scenario(hero: .bb, priorAction: .facingOpen(from: .btn))))
+        let pure3b = c.entries.values.filter { if case .pure(.threeBet) = $0 { return true } else { return false } }.count
+        let mix    = c.entries.values.filter { if case .mixed(let a, let p) = $0 { return a == .threeBet && p == .call } else { return false } }.count
+        let calls  = c.entries.values.filter { if case .pure(.call) = $0 { return true } else { return false } }.count
+        #expect(pure3b == 28)
+        #expect(mix == 8)
+        #expect(calls == 58)
+        #expect(pure3b + mix + calls == 94)
+    }
+
+    @Test func bbVsBtnSpecificEntries() throws {
+        let repo = try #require(Self.repo())
+        let c = try #require(repo.chart(for: Scenario(hero: .bb, priorAction: .facingOpen(from: .btn))))
+        #expect(c.action(for: HandClass("AA")!) == .pure(.threeBet))
+        #expect(c.action(for: HandClass("99")!) == .pure(.threeBet))
+        #expect(c.action(for: HandClass("88")!) == .mixed(aggressive: .threeBet, passive: .call))
+        #expect(c.action(for: HandClass("AJo")!) == .mixed(aggressive: .threeBet, passive: .call))
+        #expect(c.action(for: HandClass("A6o")!) == .pure(.fold))
+        #expect(c.action(for: HandClass("A2o")!) == .pure(.fold))
+        #expect(c.action(for: HandClass("72o")!) == .pure(.fold))
+    }
+
+    @Test func bbWidensFromUtgToBtn() throws {
+        // Every hand active vs UTG should also be active vs BTN.
+        let repo = try #require(Self.repo())
+        let utg = try #require(repo.chart(for: Scenario(hero: .bb, priorAction: .facingOpen(from: .utg))))
+        let btn = try #require(repo.chart(for: Scenario(hero: .bb, priorAction: .facingOpen(from: .btn))))
+        func active(_ chart: Chart) -> Set<HandClass> {
+            Set(chart.entries.filter { _, a in
+                if case .pure(.fold) = a { return false }
+                return true
+            }.keys)
+        }
+        #expect(active(utg).isSubset(of: active(btn)))
+    }
 }
