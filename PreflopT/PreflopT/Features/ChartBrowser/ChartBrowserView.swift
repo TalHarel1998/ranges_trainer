@@ -3,7 +3,7 @@
 //  PreflopT
 //
 //  Two-level chart browser:
-//    Home     -> list of chart categories (RFI / BTN defense / SB defense)
+//    Home     -> list of chart categories (RFI / BTN / SB / BB defense)
 //    Category -> list of the scenarios within that category
 //    Detail   -> the chart itself (ChartDetailView).
 //
@@ -17,22 +17,16 @@ enum ChartCategory: String, CaseIterable, Hashable, Identifiable {
     case rfi
     case btnDefense
     case sbDefense
+    case bbDefense
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .rfi:        return "RFI — 6-max cash"
+        case .rfi:        return "RFI"
         case .btnDefense: return "BTN defense"
         case .sbDefense:  return "SB defense"
-        }
-    }
-
-    var systemImage: String {
-        switch self {
-        case .rfi:        return "hand.raised"
-        case .btnDefense: return "shield.lefthalf.filled"
-        case .sbDefense:  return "shield"
+        case .bbDefense:  return "BB defense"
         }
     }
 
@@ -52,6 +46,9 @@ enum ChartCategory: String, CaseIterable, Hashable, Identifiable {
 
         case .sbDefense:
             return defenseCharts(from: all, hero: .sb)
+
+        case .bbDefense:
+            return defenseCharts(from: all, hero: .bb)
         }
     }
 
@@ -152,7 +149,7 @@ private struct CategoryChartListView: View {
         switch category {
         case .rfi:
             RFIChartRow(chart: chart)
-        case .btnDefense, .sbDefense:
+        case .btnDefense, .sbDefense, .bbDefense:
             DefenseChartRow(chart: chart)
         }
     }
@@ -203,11 +200,17 @@ private struct DefenseChartRow: View {
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 2) {
-                Text("\(threeBetCombos) 3-bet")
-                    .foregroundStyle(.red)
+                if threeBetCombos > 0 {
+                    Text("\(threeBetCombos) 3-bet")
+                        .foregroundStyle(.red)
+                }
                 if mixedCombos > 0 {
                     Text("\(mixedCombos) mix")
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(ActionPalette.mixedFill)
+                }
+                if callCombos > 0 {
+                    Text("\(callCombos) call")
+                        .foregroundStyle(ActionPalette.fill(for: .call))
                 }
             }
             .font(.caption)
@@ -234,6 +237,14 @@ private struct DefenseChartRow: View {
     private var mixedCombos: Int {
         chart.entries.reduce(into: 0) { partial, entry in
             if case .mixed = entry.value {
+                partial += entry.key.comboCount
+            }
+        }
+    }
+
+    private var callCombos: Int {
+        chart.entries.reduce(into: 0) { partial, entry in
+            if case .pure(.call) = entry.value {
                 partial += entry.key.comboCount
             }
         }
