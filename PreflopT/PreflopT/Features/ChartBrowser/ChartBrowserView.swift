@@ -87,7 +87,7 @@ struct ChartBrowserView: View {
                     }
                 }
             }
-            .navigationTitle("PreflopT")
+            .navigationTitle("GG 6-Max Cash Ranges")
             .navigationDestination(for: ChartCategory.self) { category in
                 CategoryChartListView(category: category)
             }
