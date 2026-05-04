@@ -37,6 +37,17 @@ struct ChartBrowserView: View {
                         }
                     }
                 }
+
+                let sbDef = sbDefenseCharts
+                if !sbDef.isEmpty {
+                    Section("SB defense") {
+                        ForEach(sbDef, id: \.scenario.key) { chart in
+                            NavigationLink(value: chart.scenario.key) {
+                                DefenseChartRow(chart: chart)
+                            }
+                        }
+                    }
+                }
             }
             .navigationTitle("PreflopT")
             .navigationDestination(for: String.self) { scenarioKey in
@@ -63,15 +74,17 @@ struct ChartBrowserView: View {
             .sorted { $0.scenario.hero.actionOrder < $1.scenario.hero.actionOrder }
     }
 
-    private var btnDefenseCharts: [Chart] {
+    private var btnDefenseCharts: [Chart] { defenseCharts(hero: .btn) }
+    private var sbDefenseCharts: [Chart]  { defenseCharts(hero: .sb) }
+
+    private func defenseCharts(hero: Position) -> [Chart] {
         repository.allCharts()
             .filter {
-                guard $0.scenario.hero == .btn else { return false }
+                guard $0.scenario.hero == hero else { return false }
                 if case .facingOpen = $0.scenario.priorAction { return true }
                 return false
             }
             .sorted { lhs, rhs in
-                // Earlier villain first (UTG before CO).
                 guard case .facingOpen(let l) = lhs.scenario.priorAction,
                       case .facingOpen(let r) = rhs.scenario.priorAction
                 else { return false }
@@ -125,15 +138,37 @@ private struct DefenseChartRow: View {
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 2) {
-                Text("\(chart.comboCount(containing: .threeBet)) 3-bet")
+                Text("\(threeBetCombos) 3-bet")
                     .foregroundStyle(.red)
-                Text("\(chart.comboCount(containing: .call)) call")
-                    .foregroundStyle(.blue)
+                if mixedCombos > 0 {
+                    Text("\(mixedCombos) mix")
+                        .foregroundStyle(.blue)
+                }
             }
             .font(.caption)
             .monospacedDigit()
         }
         .padding(.vertical, 4)
+    }
+
+    /// Total combos that pure-3-bet (not counting mixed cells here — mixed
+    /// cells get their own row below).
+    private var threeBetCombos: Int {
+        chart.entries.reduce(into: 0) { partial, entry in
+            if case .pure(.threeBet) = entry.value {
+                partial += entry.key.comboCount
+            }
+        }
+    }
+
+    /// Total combos across all mixed cells (regardless of whether the
+    /// passive leg is call or fold).
+    private var mixedCombos: Int {
+        chart.entries.reduce(into: 0) { partial, entry in
+            if case .mixed = entry.value {
+                partial += entry.key.comboCount
+            }
+        }
     }
 
     private var villainName: String {

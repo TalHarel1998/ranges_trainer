@@ -86,21 +86,78 @@ struct ChartDetailView: View {
 
     // MARK: - Legend with combo percentages
 
-    /// Actions to display in the legend, in order. Driven by the scenario
-    /// so RFI charts show Open/Fold and defense charts show 3-Bet/Call/Fold.
-    private var legendActions: [Action] {
+    /// A single row in the legend below the grid.
+    private struct LegendItem: Identifiable {
+        let id = UUID()
+        let color: Color
+        let label: String
+        let fraction: Double
+    }
+
+    /// Items shown in the legend. For RFI: Open / Fold. For defense:
+    /// 3-Bet (pure red) / 3-Bet/Call or 3-Bet/Fold (blue mixed) / Fold.
+    private var legendItems: [LegendItem] {
         switch chart.scenario.priorAction {
         case .firstToAct:
-            return [.open, .fold]
+            let open = chart.fractionOfCombos(containing: .open)
+            return [
+                LegendItem(color: ActionPalette.fill(for: .open), label: "Open", fraction: open),
+                LegendItem(color: ActionPalette.fill(for: .fold), label: "Fold", fraction: 1 - open),
+            ]
         case .facingOpen:
-            return [.threeBet, .call, .fold]
+            // Split the chart's entries into three buckets by ChartAction kind.
+            var pure3bet = 0
+            var mixed3betCall = 0
+            var mixed3betFold = 0
+            for (hand, action) in chart.entries {
+                switch action {
+                case .pure(.threeBet):
+                    pure3bet += hand.comboCount
+                case .mixed(.threeBet, .call):
+                    mixed3betCall += hand.comboCount
+                case .mixed(.threeBet, .fold):
+                    mixed3betFold += hand.comboCount
+                default:
+                    break
+                }
+            }
+            let total = 1326.0
+            let pureFrac = Double(pure3bet) / total
+            let mixFrac = Double(mixed3betCall + mixed3betFold) / total
+            let foldFrac = max(0, 1 - pureFrac - mixFrac)
+
+            let mixLabel: String
+            if mixed3betCall > 0 && mixed3betFold == 0 {
+                mixLabel = "3-Bet/Call"
+            } else if mixed3betFold > 0 && mixed3betCall == 0 {
+                mixLabel = "3-Bet/Fold"
+            } else if mixed3betCall == 0 && mixed3betFold == 0 {
+                mixLabel = "Mix"
+            } else {
+                mixLabel = "Mixed"
+            }
+
+            var items: [LegendItem] = [
+                LegendItem(color: ActionPalette.fill(for: .threeBet), label: "3-Bet", fraction: pureFrac),
+            ]
+            if mixFrac > 0 {
+                // Blue for any mixed cell regardless of passive leg, matching
+                // the grid rendering convention.
+                items.append(LegendItem(color: ActionPalette.fill(for: .call),
+                                        label: mixLabel,
+                                        fraction: mixFrac))
+            }
+            items.append(LegendItem(color: ActionPalette.fill(for: .fold),
+                                    label: "Fold",
+                                    fraction: foldFrac))
+            return items
         }
     }
 
     private var legend: some View {
         HStack(spacing: 12) {
-            ForEach(legendActions, id: \.self) { action in
-                legendSwatch(action: action)
+            ForEach(legendItems) { item in
+                legendSwatch(item: item)
             }
             Spacer()
         }
@@ -108,48 +165,18 @@ struct ChartDetailView: View {
         .lineLimit(1)
     }
 
-    private func legendSwatch(action: Action) -> some View {
+    private func legendSwatch(item: LegendItem) -> some View {
         HStack(spacing: 5) {
             RoundedRectangle(cornerRadius: 3)
-                .fill(ActionPalette.fill(for: action))
+                .fill(item.color)
                 .frame(width: 12, height: 12)
-            Text(label(for: action))
+            Text(item.label)
                 .foregroundStyle(.primary)
-            Text(Self.format(fraction(for: action)))
+            Text(Self.format(item.fraction))
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
         }
         .fixedSize(horizontal: true, vertical: false)
-    }
-
-    /// Fraction of combos in the chart for a given action. For the Fold row
-    /// we compute the complement since our chart model doesn't store folds
-    /// explicitly.
-    private func fraction(for action: Action) -> Double {
-        if action == .fold {
-            // Fold fraction = 1 - sum(other action fractions)
-            let nonFoldActions = legendActions.filter { $0 != .fold }
-            let nonFoldSum = nonFoldActions.reduce(0.0) { $0 + chart.fractionOfCombos(containing: $1) }
-            return max(0, 1.0 - nonFoldSum)
-        }
-        return chart.fractionOfCombos(containing: action)
-    }
-
-    private func label(for action: Action) -> String {
-        switch action {
-        case .fold:     return "Fold"
-        case .call:
-            // In defense scenarios we don't yet ship pure-call cells; what
-            // shows up as "Call" combos comes from mixed 3-bet/call hands.
-            // Label accordingly so the legend reflects the actual action set.
-            if case .facingOpen = chart.scenario.priorAction {
-                return "3-Bet/Call"
-            }
-            return "Call"
-        case .open:     return "Open"
-        case .threeBet: return "3-Bet"
-        case .fourBet:  return "4-Bet"
-        }
     }
 
     private static func format(_ fraction: Double) -> String {
