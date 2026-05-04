@@ -98,26 +98,28 @@ struct ChartDetailView: View {
     }
 
     private var legend: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: 12) {
             ForEach(legendActions, id: \.self) { action in
                 legendSwatch(action: action)
             }
             Spacer()
         }
-        .font(.subheadline)
+        .font(.caption)
+        .lineLimit(1)
     }
 
     private func legendSwatch(action: Action) -> some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 5) {
             RoundedRectangle(cornerRadius: 3)
                 .fill(ActionPalette.fill(for: action))
-                .frame(width: 16, height: 16)
+                .frame(width: 12, height: 12)
             Text(label(for: action))
                 .foregroundStyle(.primary)
             Text(Self.format(fraction(for: action)))
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
         }
+        .fixedSize(horizontal: true, vertical: false)
     }
 
     /// Fraction of combos in the chart for a given action. For the Fold row
