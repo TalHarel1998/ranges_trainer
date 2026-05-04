@@ -41,10 +41,11 @@ enum ActionPalette {
         switch chartAction {
         case .pure(let a):
             return fill(for: a)
-        case .mixed(let aggressive, _):
-            // v1: mixed cells take the aggressive color. Split rendering can
-            // be added when we ship charts that include mixed cells.
-            return fill(for: aggressive)
+        case .mixed(_, let passive):
+            // Visually distinguish mixed cells from pure-aggressive cells by
+            // using the passive leg's color. For a 3-bet/call mix this is
+            // blue (Call), so pure 3-bets are red and mixed cells are blue.
+            return fill(for: passive)
         }
     }
 

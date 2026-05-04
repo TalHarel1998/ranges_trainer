@@ -136,7 +136,14 @@ struct ChartDetailView: View {
     private func label(for action: Action) -> String {
         switch action {
         case .fold:     return "Fold"
-        case .call:     return "Call"
+        case .call:
+            // In defense scenarios we don't yet ship pure-call cells; what
+            // shows up as "Call" combos comes from mixed 3-bet/call hands.
+            // Label accordingly so the legend reflects the actual action set.
+            if case .facingOpen = chart.scenario.priorAction {
+                return "3Bet/Call"
+            }
+            return "Call"
         case .open:     return "Open"
         case .threeBet: return "3-Bet"
         case .fourBet:  return "4-Bet"
