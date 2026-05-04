@@ -141,7 +141,7 @@ struct ChartDetailView: View {
             // shows up as "Call" combos comes from mixed 3-bet/call hands.
             // Label accordingly so the legend reflects the actual action set.
             if case .facingOpen = chart.scenario.priorAction {
-                return "3Bet/Call"
+                return "3-Bet/Call"
             }
             return "Call"
         case .open:     return "Open"
