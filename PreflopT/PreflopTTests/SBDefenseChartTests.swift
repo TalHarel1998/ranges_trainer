@@ -76,19 +76,23 @@ struct DefenseSBTests {
     }
 
     @Test func sbWidensVsLaterOpener() throws {
-        // Every hand active vs UTG should also be active vs BTN.
+        // Every hand active vs UTG should also be active vs CO, and vs CO
+        // should be a subset of vs BTN.
         let repo = try #require(Self.repo())
         let utg = try #require(repo.chart(for: Scenario(hero: .sb, priorAction: .facingOpen(from: .utg))))
+        let co  = try #require(repo.chart(for: Scenario(hero: .sb, priorAction: .facingOpen(from: .co))))
         let btn = try #require(repo.chart(for: Scenario(hero: .sb, priorAction: .facingOpen(from: .btn))))
-        let utgActive = Set(utg.entries.filter { _, a in
-            if case .pure(.fold) = a { return false }
-            return true
-        }.keys)
-        let btnActive = Set(btn.entries.filter { _, a in
-            if case .pure(.fold) = a { return false }
-            return true
-        }.keys)
-        #expect(utgActive.isSubset(of: btnActive))
+        func active(_ chart: Chart) -> Set<HandClass> {
+            Set(chart.entries.filter { _, a in
+                if case .pure(.fold) = a { return false }
+                return true
+            }.keys)
+        }
+        let utgActive = active(utg)
+        let coActive  = active(co)
+        let btnActive = active(btn)
+        #expect(utgActive.isSubset(of: coActive))
+        #expect(coActive.isSubset(of: btnActive))
     }
 
     // MARK: - Mixed 3-Bet/Fold resolution
@@ -107,5 +111,30 @@ struct DefenseSBTests {
         let action = c.action(for: HandClass("A4s")!)
         let hc = HoleCards(Card(.ace, .spades), Card(.four, .hearts))!
         #expect(action.resolve(for: hc) == .fold)
+    }
+
+    // MARK: - SB vs CO
+
+    @Test func sbVsCoLoads() throws {
+        let repo = try #require(Self.repo())
+        let c = try #require(repo.chart(for: Scenario(hero: .sb, priorAction: .facingOpen(from: .co))))
+        #expect(c.scenario.key == "def.sb.vs.co")
+    }
+
+    @Test func sbVsCoPureCounts() throws {
+        let repo = try #require(Self.repo())
+        let c = try #require(repo.chart(for: Scenario(hero: .sb, priorAction: .facingOpen(from: .co))))
+        let pures = c.entries.values.filter { if case .pure(.threeBet) = $0 { return true } else { return false } }
+        #expect(pures.count == 22)
+    }
+
+    @Test func sbVsCoMixed3betFoldCounts() throws {
+        let repo = try #require(Self.repo())
+        let c = try #require(repo.chart(for: Scenario(hero: .sb, priorAction: .facingOpen(from: .co))))
+        let mixes = c.entries.values.filter {
+            if case .mixed(let agg, let pas) = $0 { return agg == .threeBet && pas == .fold }
+            return false
+        }
+        #expect(mixes.count == 5)
     }
 }
