@@ -2,10 +2,75 @@
 //  ChartBrowserView.swift
 //  PreflopT
 //
-//  Top-level list of available charts. Tap a row to open the chart detail.
+//  Two-level chart browser:
+//    Home     -> list of chart categories (RFI / BTN defense / SB defense)
+//    Category -> list of the scenarios within that category
+//    Detail   -> the chart itself (ChartDetailView).
 //
 
 import SwiftUI
+
+// MARK: - Categories
+
+/// A top-level group of charts the user can drill into.
+enum ChartCategory: String, CaseIterable, Hashable, Identifiable {
+    case rfi
+    case btnDefense
+    case sbDefense
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .rfi:        return "RFI — 6-max cash"
+        case .btnDefense: return "BTN defense"
+        case .sbDefense:  return "SB defense"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .rfi:        return "hand.raised"
+        case .btnDefense: return "shield.lefthalf.filled"
+        case .sbDefense:  return "shield"
+        }
+    }
+
+    /// Filter + sort a full chart list down to this category's charts.
+    func charts(from all: [Chart]) -> [Chart] {
+        switch self {
+        case .rfi:
+            return all
+                .filter {
+                    if case .firstToAct = $0.scenario.priorAction { return true }
+                    return false
+                }
+                .sorted { $0.scenario.hero.actionOrder < $1.scenario.hero.actionOrder }
+
+        case .btnDefense:
+            return defenseCharts(from: all, hero: .btn)
+
+        case .sbDefense:
+            return defenseCharts(from: all, hero: .sb)
+        }
+    }
+
+    private func defenseCharts(from all: [Chart], hero: Position) -> [Chart] {
+        all.filter {
+                guard $0.scenario.hero == hero else { return false }
+                if case .facingOpen = $0.scenario.priorAction { return true }
+                return false
+            }
+            .sorted { lhs, rhs in
+                guard case .facingOpen(let l) = lhs.scenario.priorAction,
+                      case .facingOpen(let r) = rhs.scenario.priorAction
+                else { return false }
+                return l.actionOrder < r.actionOrder
+            }
+    }
+}
+
+// MARK: - Home (category list)
 
 struct ChartBrowserView: View {
     @Environment(\.chartRepository) private var repository
@@ -13,43 +78,19 @@ struct ChartBrowserView: View {
     var body: some View {
         NavigationStack {
             List {
-                Section("RFI — 6-max cash") {
-                    let rfi = rfiCharts
-                    if rfi.isEmpty {
-                        Text("No charts loaded.")
-                            .foregroundStyle(.secondary)
-                    } else {
-                        ForEach(rfi, id: \.scenario.key) { chart in
-                            NavigationLink(value: chart.scenario.key) {
-                                RFIChartRow(chart: chart)
-                            }
-                        }
-                    }
-                }
-
-                let btnDef = btnDefenseCharts
-                if !btnDef.isEmpty {
-                    Section("BTN defense") {
-                        ForEach(btnDef, id: \.scenario.key) { chart in
-                            NavigationLink(value: chart.scenario.key) {
-                                DefenseChartRow(chart: chart)
-                            }
-                        }
-                    }
-                }
-
-                let sbDef = sbDefenseCharts
-                if !sbDef.isEmpty {
-                    Section("SB defense") {
-                        ForEach(sbDef, id: \.scenario.key) { chart in
-                            NavigationLink(value: chart.scenario.key) {
-                                DefenseChartRow(chart: chart)
-                            }
+                ForEach(ChartCategory.allCases) { category in
+                    let charts = category.charts(from: repository.allCharts())
+                    if !charts.isEmpty {
+                        NavigationLink(value: category) {
+                            CategoryRow(category: category, chartCount: charts.count)
                         }
                     }
                 }
             }
             .navigationTitle("PreflopT")
+            .navigationDestination(for: ChartCategory.self) { category in
+                CategoryChartListView(category: category)
+            }
             .navigationDestination(for: String.self) { scenarioKey in
                 if let scenario = Scenario(key: scenarioKey),
                    let chart = repository.chart(for: scenario) {
@@ -64,32 +105,63 @@ struct ChartBrowserView: View {
             }
         }
     }
+}
 
-    private var rfiCharts: [Chart] {
-        repository.allCharts()
-            .filter {
-                if case .firstToAct = $0.scenario.priorAction { return true }
-                return false
+private struct CategoryRow: View {
+    let category: ChartCategory
+    let chartCount: Int
+
+    var body: some View {
+        HStack {
+            Image(systemName: category.systemImage)
+                .font(.title3)
+                .foregroundStyle(.tint)
+                .frame(width: 32)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(category.title)
+                    .font(.headline)
+                Text("\(chartCount) chart\(chartCount == 1 ? "" : "s")")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
-            .sorted { $0.scenario.hero.actionOrder < $1.scenario.hero.actionOrder }
+            Spacer()
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+// MARK: - Category detail (scenario list)
+
+private struct CategoryChartListView: View {
+    let category: ChartCategory
+    @Environment(\.chartRepository) private var repository
+
+    var body: some View {
+        List {
+            let charts = category.charts(from: repository.allCharts())
+            if charts.isEmpty {
+                Text("No charts available.")
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(charts, id: \.scenario.key) { chart in
+                    NavigationLink(value: chart.scenario.key) {
+                        scenarioRow(for: chart)
+                    }
+                }
+            }
+        }
+        .navigationTitle(category.title)
+        .navigationBarTitleDisplayMode(.inline)
     }
 
-    private var btnDefenseCharts: [Chart] { defenseCharts(hero: .btn) }
-    private var sbDefenseCharts: [Chart]  { defenseCharts(hero: .sb) }
-
-    private func defenseCharts(hero: Position) -> [Chart] {
-        repository.allCharts()
-            .filter {
-                guard $0.scenario.hero == hero else { return false }
-                if case .facingOpen = $0.scenario.priorAction { return true }
-                return false
-            }
-            .sorted { lhs, rhs in
-                guard case .facingOpen(let l) = lhs.scenario.priorAction,
-                      case .facingOpen(let r) = rhs.scenario.priorAction
-                else { return false }
-                return l.actionOrder < r.actionOrder
-            }
+    @ViewBuilder
+    private func scenarioRow(for chart: Chart) -> some View {
+        switch category {
+        case .rfi:
+            RFIChartRow(chart: chart)
+        case .btnDefense, .sbDefense:
+            DefenseChartRow(chart: chart)
+        }
     }
 }
 
@@ -151,8 +223,13 @@ private struct DefenseChartRow: View {
         .padding(.vertical, 4)
     }
 
-    /// Total combos that pure-3-bet (not counting mixed cells here — mixed
-    /// cells get their own row below).
+    private var villainName: String {
+        if case .facingOpen(let villain) = chart.scenario.priorAction {
+            return villain.rawValue
+        }
+        return "?"
+    }
+
     private var threeBetCombos: Int {
         chart.entries.reduce(into: 0) { partial, entry in
             if case .pure(.threeBet) = entry.value {
@@ -161,8 +238,6 @@ private struct DefenseChartRow: View {
         }
     }
 
-    /// Total combos across all mixed cells (regardless of whether the
-    /// passive leg is call or fold).
     private var mixedCombos: Int {
         chart.entries.reduce(into: 0) { partial, entry in
             if case .mixed = entry.value {
@@ -170,14 +245,9 @@ private struct DefenseChartRow: View {
             }
         }
     }
-
-    private var villainName: String {
-        if case .facingOpen(let villain) = chart.scenario.priorAction {
-            return villain.rawValue
-        }
-        return "?"
-    }
 }
+
+// MARK: - Preview
 
 #Preview {
     ChartBrowserView()
