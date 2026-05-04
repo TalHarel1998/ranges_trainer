@@ -105,10 +105,11 @@ struct ChartDetailView: View {
                 LegendItem(color: ActionPalette.fill(for: .fold), label: "Fold", fraction: 1 - open),
             ]
         case .facingOpen:
-            // Split the chart's entries into three buckets by ChartAction kind.
+            // Split the chart's entries into four buckets by ChartAction kind.
             var pure3bet = 0
             var mixed3betCall = 0
             var mixed3betFold = 0
+            var pureCall = 0
             for (hand, action) in chart.entries {
                 switch action {
                 case .pure(.threeBet):
@@ -117,14 +118,17 @@ struct ChartDetailView: View {
                     mixed3betCall += hand.comboCount
                 case .mixed(.threeBet, .fold):
                     mixed3betFold += hand.comboCount
+                case .pure(.call):
+                    pureCall += hand.comboCount
                 default:
                     break
                 }
             }
             let total = 1326.0
             let pureFrac = Double(pure3bet) / total
-            let mixFrac = Double(mixed3betCall + mixed3betFold) / total
-            let foldFrac = max(0, 1 - pureFrac - mixFrac)
+            let mixFrac  = Double(mixed3betCall + mixed3betFold) / total
+            let callFrac = Double(pureCall) / total
+            let foldFrac = max(0, 1 - pureFrac - mixFrac - callFrac)
 
             let mixLabel: String
             if mixed3betCall > 0 && mixed3betFold == 0 {
@@ -141,11 +145,16 @@ struct ChartDetailView: View {
                 LegendItem(color: ActionPalette.fill(for: .threeBet), label: "3-Bet", fraction: pureFrac),
             ]
             if mixFrac > 0 {
-                // Blue for any mixed cell regardless of passive leg, matching
-                // the grid rendering convention.
-                items.append(LegendItem(color: ActionPalette.fill(for: .call),
+                // Mixed cells render blue on the grid, regardless of the
+                // passive leg. Legend uses the same blue.
+                items.append(LegendItem(color: ActionPalette.mixedFill,
                                         label: mixLabel,
                                         fraction: mixFrac))
+            }
+            if callFrac > 0 {
+                items.append(LegendItem(color: ActionPalette.fill(for: .call),
+                                        label: "Call",
+                                        fraction: callFrac))
             }
             items.append(LegendItem(color: ActionPalette.fill(for: .fold),
                                     label: "Fold",
@@ -155,11 +164,26 @@ struct ChartDetailView: View {
     }
 
     private var legend: some View {
-        HStack(spacing: 12) {
-            ForEach(legendItems) { item in
-                legendSwatch(item: item)
+        let items = legendItems
+        return ViewThatFits(in: .horizontal) {
+            // Try to fit everything on one row.
+            HStack(spacing: 12) {
+                ForEach(items) { item in legendSwatch(item: item) }
+                Spacer()
             }
-            Spacer()
+            // Fallback: two rows, splitting roughly in half.
+            VStack(alignment: .leading, spacing: 4) {
+                let firstHalf = Array(items.prefix((items.count + 1) / 2))
+                let secondHalf = Array(items.suffix(items.count - firstHalf.count))
+                HStack(spacing: 12) {
+                    ForEach(firstHalf) { item in legendSwatch(item: item) }
+                    Spacer()
+                }
+                HStack(spacing: 12) {
+                    ForEach(secondHalf) { item in legendSwatch(item: item) }
+                    Spacer()
+                }
+            }
         }
         .font(.caption)
         .lineLimit(1)
