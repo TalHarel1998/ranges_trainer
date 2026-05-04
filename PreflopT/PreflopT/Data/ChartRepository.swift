@@ -54,6 +54,8 @@ public final class BundledChartRepository: ChartRepository {
         ("sb",  "rfi.sb"),
         ("btn_vs_utg", "def.btn.vs.utg"),
         ("btn_vs_co",  "def.btn.vs.co"),
+        ("sb_vs_utg",  "def.sb.vs.utg"),
+        ("sb_vs_btn",  "def.sb.vs.btn"),
     ]
 
     private let bundle: Bundle
