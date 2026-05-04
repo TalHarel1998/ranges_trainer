@@ -112,19 +112,12 @@ private struct CategoryRow: View {
     let chartCount: Int
 
     var body: some View {
-        HStack {
-            Image(systemName: category.systemImage)
-                .font(.title3)
-                .foregroundStyle(.tint)
-                .frame(width: 32)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(category.title)
-                    .font(.headline)
-                Text("\(chartCount) chart\(chartCount == 1 ? "" : "s")")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
+        VStack(alignment: .leading, spacing: 2) {
+            Text(category.title)
+                .font(.headline)
+            Text("\(chartCount) chart\(chartCount == 1 ? "" : "s")")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
         .padding(.vertical, 4)
     }
