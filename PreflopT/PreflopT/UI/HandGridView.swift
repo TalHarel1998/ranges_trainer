@@ -30,11 +30,18 @@ enum ActionPalette {
     static func fill(for action: Action) -> Color {
         switch action {
         case .fold:     return Color(.systemGray5)
-        case .call:     return Color(red: 0.30, green: 0.62, blue: 0.93)   // blue
+        case .call:     return Color(red: 0.96, green: 0.80, blue: 0.20)   // yellow
         case .open:     return Color(red: 0.22, green: 0.70, blue: 0.35)   // green
         case .threeBet: return Color(red: 0.92, green: 0.30, blue: 0.30)   // red
         case .fourBet:  return Color(red: 0.60, green: 0.20, blue: 0.75)   // purple
         }
+    }
+
+    /// Color used for mixed-action chart cells. Kept separate from
+    /// `fill(for: .call)` so pure-call (yellow) and mixed cells (blue)
+    /// remain visually distinct.
+    static var mixedFill: Color {
+        Color(red: 0.30, green: 0.62, blue: 0.93)   // blue
     }
 
     static func fill(for chartAction: ChartAction) -> Color {
@@ -42,24 +49,26 @@ enum ActionPalette {
         case .pure(let a):
             return fill(for: a)
         case .mixed:
-            // All mixed cells render with the call-blue color to visually
-            // distinguish them from pure 3-bet (red) and pure fold (grey),
-            // regardless of whether the passive leg is call or fold.
-            return fill(for: .call)
+            return mixedFill
         }
     }
 
     /// Foreground (text) color that stays legible on top of `fill(for:)`.
     static func foreground(for chartAction: ChartAction) -> Color {
         switch chartAction {
-        case .pure(.fold):  return .primary.opacity(0.8)
-        case .pure:         return .white
-        case .mixed:        return .white
+        case .pure(.fold): return .primary.opacity(0.8)
+        case .pure(.call): return .primary.opacity(0.85)   // dark text on yellow
+        case .pure:        return .white
+        case .mixed:       return .white
         }
     }
 
     static func foreground(for action: Action) -> Color {
-        action == .fold ? .primary.opacity(0.8) : .white
+        switch action {
+        case .fold: return .primary.opacity(0.8)
+        case .call: return .primary.opacity(0.85)
+        default:    return .white
+        }
     }
 }
 
