@@ -35,14 +35,20 @@ struct ChartRecallView: View {
     // MARK: - Header
 
     private var title: String {
-        "\(viewModel.chart.scenario.hero.rawValue) RFI · Recall"
+        let hero = viewModel.chart.scenario.hero.rawValue
+        switch viewModel.chart.scenario.priorAction {
+        case .firstToAct:
+            return "\(hero) RFI · Recall"
+        case .facingOpen(let villain):
+            return "\(hero) vs \(villain.rawValue) · Recall"
+        }
     }
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
             switch viewModel.phase {
             case .painting:
-                Text("Tap the hands you would open.")
+                Text(paintingPrompt)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             case .graded(let result):
@@ -52,17 +58,30 @@ struct ChartRecallView: View {
         .padding(.horizontal)
     }
 
+    private var paintingPrompt: String {
+        switch viewModel.chart.scenario.priorAction {
+        case .firstToAct:
+            return "Tap the hands you would open."
+        case .facingOpen:
+            return "Tap cells with the action you would take."
+        }
+    }
+
     private func gradedHeader(_ result: ChartRecallResult) -> some View {
         HStack(spacing: 12) {
             if result.missedCount > 0 {
                 Label("\(result.missedCount) missed", systemImage: "xmark.circle.fill")
                     .foregroundStyle(.orange)
             }
+            if result.wrongActionCount > 0 {
+                Label("\(result.wrongActionCount) wrong", systemImage: "xmark.circle.fill")
+                    .foregroundStyle(.yellow)
+            }
             if result.wrongExtraCount > 0 {
                 Label("\(result.wrongExtraCount) extra", systemImage: "xmark.circle.fill")
                     .foregroundStyle(.red)
             }
-            if result.missedCount == 0 && result.wrongExtraCount == 0 {
+            if result.missedCount == 0 && result.wrongActionCount == 0 && result.wrongExtraCount == 0 {
                 Label("Perfect", systemImage: "checkmark.circle.fill")
                     .foregroundStyle(.green)
             }
@@ -89,11 +108,8 @@ struct ChartRecallView: View {
     }
 
     private func paintingStyle(for hand: HandClass) -> HandCellStyle {
-        if let action = viewModel.painted[hand] {
-            return HandCellStyle(
-                fill: ActionPalette.fill(for: action),
-                foreground: ActionPalette.foreground(for: action)
-            )
+        if let answer = viewModel.painted[hand] {
+            return style(forAnswer: answer)
         }
         return HandCellStyle(
             fill: ActionPalette.fill(for: .fold),
@@ -101,29 +117,50 @@ struct ChartRecallView: View {
         )
     }
 
-    private func gradedStyle(for hand: HandClass, result: ChartRecallResult) -> HandCellStyle {
-        let expected = viewModel.chart.action(for: hand)
+    /// Map a user-painted answer to a cell fill/foreground. Matches the
+    /// read-only chart detail convention: pure colors per action, mixed = blue.
+    private func style(forAnswer answer: RecallAnswer) -> HandCellStyle {
+        switch answer {
+        case .pure(let a):
+            return HandCellStyle(
+                fill: ActionPalette.fill(for: a),
+                foreground: ActionPalette.foreground(for: a)
+            )
+        case .mixed:
+            return HandCellStyle(fill: ActionPalette.mixedFill, foreground: .white)
+        }
+    }
 
-        // Semantic colors for the graded view (independent of action palette):
-        //   green  = correct non-fold answer
-        //   orange = missed (chart wanted this hand, user folded)
-        //   red    = extra  (user played this, chart says fold)
+    private func gradedStyle(for hand: HandClass, result: ChartRecallResult) -> HandCellStyle {
+        // Four-color result scheme:
+        //   green  = correct (matched the chart exactly)
+        //   yellow = wrong action (user painted something non-fold that doesn't match)
+        //   orange = missed (chart non-fold, user folded)
+        //   red    = extra (user painted, chart folds)
+        //   grey   = correct fold (no highlight)
         let correctGreen = Color(red: 0.22, green: 0.70, blue: 0.35)
+        let wrongYellow  = Color(red: 0.96, green: 0.80, blue: 0.20)
         let missedOrange = Color(red: 0.95, green: 0.62, blue: 0.10)
         let wrongRed     = Color(red: 0.92, green: 0.30, blue: 0.30)
         let foldFill     = ActionPalette.fill(for: .fold)
         let foldFg       = ActionPalette.foreground(for: .fold)
+        let textOnYellow = Color.primary.opacity(0.85)
 
         switch result.grades[hand] {
-        case .correct where !expected.contains(.fold):
-            return HandCellStyle(fill: correctGreen, foreground: .white)
         case .correct:
-            // Correct fold: keep neutral, no overlay.
-            return HandCellStyle(fill: foldFill, foreground: foldFg)
+            // If the chart expected fold and user left it blank, it's still
+            // correct — show neutral. Otherwise green.
+            let expected = viewModel.chart.action(for: hand)
+            if case .pure(.fold) = expected {
+                return HandCellStyle(fill: foldFill, foreground: foldFg)
+            }
+            return HandCellStyle(fill: correctGreen, foreground: .white)
         case .missed:
-            return HandCellStyle(fill: missedOrange, foreground: .white, overlay: nil)
-        case .wrongExtra, .wrongAction:
-            return HandCellStyle(fill: wrongRed, foreground: .white, overlay: nil)
+            return HandCellStyle(fill: missedOrange, foreground: .white)
+        case .wrongAction:
+            return HandCellStyle(fill: wrongYellow, foreground: textOnYellow)
+        case .wrongExtra:
+            return HandCellStyle(fill: wrongRed, foreground: .white)
         case .none:
             return HandCellStyle(fill: foldFill, foreground: foldFg)
         }
@@ -138,7 +175,7 @@ struct ChartRecallView: View {
         }
     }
 
-    // MARK: - Footer buttons
+    // MARK: - Footer
 
     @ViewBuilder
     private var footer: some View {
@@ -185,21 +222,21 @@ struct ChartRecallView: View {
 
     private var paletteRow: some View {
         HStack(spacing: 10) {
-            ForEach(viewModel.palette, id: \.self) { action in
+            ForEach(Array(viewModel.palette.enumerated()), id: \.offset) { index, option in
                 Button {
-                    viewModel.selectedAction = action
+                    viewModel.selectedIndex = index
                 } label: {
                     HStack(spacing: 6) {
                         RoundedRectangle(cornerRadius: 3)
-                            .fill(ActionPalette.fill(for: action))
+                            .fill(paletteSwatchColor(for: option.answer))
                             .frame(width: 16, height: 16)
-                        Text(paletteLabel(for: action))
+                        Text(option.label)
                     }
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
                     .background(
                         RoundedRectangle(cornerRadius: 8)
-                            .stroke(viewModel.selectedAction == action ? Color.accentColor : Color.clear, lineWidth: 2)
+                            .stroke(viewModel.selectedIndex == index ? Color.accentColor : Color.clear, lineWidth: 2)
                     )
                 }
                 .buttonStyle(.plain)
@@ -211,13 +248,10 @@ struct ChartRecallView: View {
         }
     }
 
-    private func paletteLabel(for action: Action) -> String {
-        switch action {
-        case .fold:     return "Fold"
-        case .call:     return "Call"
-        case .open:     return "Open"
-        case .threeBet: return "3-Bet"
-        case .fourBet:  return "4-Bet"
+    private func paletteSwatchColor(for answer: RecallAnswer) -> Color {
+        switch answer {
+        case .pure(let a): return ActionPalette.fill(for: a)
+        case .mixed:       return ActionPalette.mixedFill
         }
     }
 }
@@ -225,6 +259,14 @@ struct ChartRecallView: View {
 #Preview("BTN Recall") {
     let repo = try! BundledChartRepository()
     let chart = repo.chart(for: Scenario(hero: .btn, priorAction: .firstToAct))!
+    return NavigationStack {
+        ChartRecallView(chart: chart)
+    }
+}
+
+#Preview("BB vs BTN Recall") {
+    let repo = try! BundledChartRepository()
+    let chart = repo.chart(for: Scenario(hero: .bb, priorAction: .facingOpen(from: .btn)))!
     return NavigationStack {
         ChartRecallView(chart: chart)
     }
