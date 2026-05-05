@@ -10,15 +10,16 @@ import Foundation
 
 /// Grade for a single hand class in Chart Recall mode.
 enum CellGrade: Equatable {
-    /// User's action matches the chart's action.
+    /// User's answer matches the chart exactly.
     case correct
-    /// User said fold, chart says something non-fold (user missed a hand).
-    case missed(expected: Action)
-    /// User said a non-fold action, chart says fold.
-    case wrongExtra(answered: Action)
-    /// User said a non-fold action that differs from the chart's non-fold
-    /// action (only possible with Call / 3-Bet etc., not in RFI).
-    case wrongAction(answered: Action, expected: Action)
+    /// User folded (or left blank), chart wants a non-fold action.
+    case missed(expected: ChartAction)
+    /// User painted a non-fold action, chart says fold.
+    case wrongExtra(answered: RecallAnswer)
+    /// User painted a non-fold answer that doesn't match the chart's non-fold
+    /// action (e.g. painted pure 3-bet on a pure-call cell, or painted mixed
+    /// on a pure cell, or vice versa).
+    case wrongAction(answered: RecallAnswer, expected: ChartAction)
 }
 
 /// Summary across all 169 hand classes.
@@ -62,38 +63,52 @@ enum ChartRecallGrading {
     ///
     /// - Parameters:
     ///   - painted: The user's answer for each hand class. Hand classes not
-    ///     present in `painted` are treated as `.fold`.
+    ///     present in `painted` are treated as an implicit fold.
     ///   - chart: The correct chart.
     /// - Returns: Per-cell grades for all 169 hand classes.
     static func grade(
-        painted: [HandClass: Action],
+        painted: [HandClass: RecallAnswer],
         against chart: Chart
     ) -> ChartRecallResult {
         var grades: [HandClass: CellGrade] = [:]
         grades.reserveCapacity(169)
 
         for hand in HandClass.allCases {
-            let answered = painted[hand] ?? .fold
-            let expectedChartAction = chart.action(for: hand)
-
-            if expectedChartAction.contains(answered) {
-                grades[hand] = .correct
-                continue
-            }
-
-            // Mismatch. Distinguish cases based on the expected primary action.
-            let expected = expectedChartAction.primary
-
-            switch (answered, expected) {
-            case (.fold, let e) where e != .fold:
-                grades[hand] = .missed(expected: e)
-            case (let a, .fold) where a != .fold:
-                grades[hand] = .wrongExtra(answered: a)
-            default:
-                grades[hand] = .wrongAction(answered: answered, expected: expected)
-            }
+            let answer = painted[hand] ?? .pure(.fold)
+            let expected = chart.action(for: hand)
+            grades[hand] = gradeOne(answer: answer, expected: expected)
         }
 
         return ChartRecallResult(grades: grades)
+    }
+
+    /// Grading for a single cell. Pulled out so it's easy to unit-test all
+    /// 3×3 combinations (pure 3-bet / mixed / pure fold on each axis).
+    static func gradeOne(answer: RecallAnswer, expected: ChartAction) -> CellGrade {
+        // Exact-match cases (both pure, both mixed, or pure-fold implicit).
+        switch (answer, expected) {
+        case (.pure(let a), .pure(let e)) where a == e:
+            return .correct
+        case (.mixed(let aAgg, let aPas), .mixed(let eAgg, let ePas))
+            where aAgg == eAgg && aPas == ePas:
+            return .correct
+        default:
+            break
+        }
+
+        // Not correct. Classify the mismatch.
+        // First, is the user "folding" (answer = .pure(.fold))?
+        if case .pure(.fold) = answer {
+            // Chart is non-fold, so missed.
+            return .missed(expected: expected)
+        }
+
+        // User painted something. Is the chart pure fold?
+        if case .pure(.fold) = expected {
+            return .wrongExtra(answered: answer)
+        }
+
+        // Both sides have a non-fold opinion but they disagree.
+        return .wrongAction(answered: answer, expected: expected)
     }
 }
