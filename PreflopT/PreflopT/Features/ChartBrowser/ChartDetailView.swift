@@ -165,42 +165,34 @@ struct ChartDetailView: View {
 
     private var legend: some View {
         let items = legendItems
-        return ViewThatFits(in: .horizontal) {
-            // Try to fit everything on one row.
-            HStack(spacing: 12) {
-                ForEach(items) { item in legendSwatch(item: item) }
-                Spacer()
-            }
-            // Fallback: two rows, splitting roughly in half.
-            VStack(alignment: .leading, spacing: 4) {
-                let firstHalf = Array(items.prefix((items.count + 1) / 2))
-                let secondHalf = Array(items.suffix(items.count - firstHalf.count))
-                HStack(spacing: 12) {
-                    ForEach(firstHalf) { item in legendSwatch(item: item) }
-                    Spacer()
-                }
-                HStack(spacing: 12) {
-                    ForEach(secondHalf) { item in legendSwatch(item: item) }
-                    Spacer()
-                }
-            }
+        // Single row for all cases. Font scales down if width is tight so
+        // legends with 4 items (BB defense) still fit on one line.
+        return HStack(spacing: 10) {
+            ForEach(items) { item in legendSwatch(item: item) }
+            Spacer(minLength: 0)
         }
-        .font(.caption)
         .lineLimit(1)
+        .minimumScaleFactor(0.7)
     }
 
     private func legendSwatch(item: LegendItem) -> some View {
-        HStack(spacing: 5) {
+        HStack(spacing: 4) {
             RoundedRectangle(cornerRadius: 3)
                 .fill(item.color)
-                .frame(width: 12, height: 12)
+                .frame(width: 11, height: 11)
             Text(item.label)
+                .font(.caption2)
                 .foregroundStyle(.primary)
+                .lineLimit(1)
             Text(Self.format(item.fraction))
+                .font(.caption2)
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
+                .lineLimit(1)
         }
-        .fixedSize(horizontal: true, vertical: false)
+        // Let individual labels compress if they run out of room rather than
+        // overflowing or wrapping.
+        .layoutPriority(1)
     }
 
     private static func format(_ fraction: Double) -> String {

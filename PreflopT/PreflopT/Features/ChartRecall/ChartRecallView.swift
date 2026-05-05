@@ -221,18 +221,21 @@ struct ChartRecallView: View {
     }
 
     private var paletteRow: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             ForEach(Array(viewModel.palette.enumerated()), id: \.offset) { index, option in
                 Button {
                     viewModel.selectedIndex = index
                 } label: {
-                    HStack(spacing: 6) {
+                    HStack(spacing: 5) {
                         RoundedRectangle(cornerRadius: 3)
                             .fill(paletteSwatchColor(for: option.answer))
-                            .frame(width: 16, height: 16)
+                            .frame(width: 14, height: 14)
                         Text(option.label)
+                            .font(.footnote.weight(.medium))
+                            .lineLimit(1)
+                            .fixedSize(horizontal: true, vertical: false)
                     }
-                    .padding(.horizontal, 10)
+                    .padding(.horizontal, 8)
                     .padding(.vertical, 6)
                     .background(
                         RoundedRectangle(cornerRadius: 8)
@@ -241,10 +244,11 @@ struct ChartRecallView: View {
                 }
                 .buttonStyle(.plain)
             }
-            Spacer()
-            Text("\(viewModel.painted.count) painted")
+            Spacer(minLength: 4)
+            Text("\(viewModel.painted.count)")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .monospacedDigit()
         }
     }
 
