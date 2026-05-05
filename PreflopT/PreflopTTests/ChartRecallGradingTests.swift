@@ -9,100 +9,127 @@ import Testing
 @Suite("ChartRecallGrading")
 struct ChartRecallGradingTests {
 
-    /// Build a minimal chart: UTG opens exactly {AA, AKs, AKo}.
-    private func makeSmallChart() -> Chart {
+    /// Build a minimal RFI chart: UTG opens exactly {AA, AKs, AKo}.
+    private func makeSmallRFIChart() -> Chart {
         let scenario = Scenario(hero: .utg, priorAction: .firstToAct)
         let entries: [HandClass: ChartAction] = [
-            HandClass("AA")!: .pure(.open),
+            HandClass("AA")!:  .pure(.open),
             HandClass("AKs")!: .pure(.open),
             HandClass("AKo")!: .pure(.open),
         ]
         return Chart(scenario: scenario, entries: entries)
     }
 
+    // Convenience helpers for building painted dictionaries more tersely.
+    private func open(_ symbols: String...) -> [HandClass: RecallAnswer] {
+        Dictionary(uniqueKeysWithValues: symbols.compactMap(HandClass.init).map { ($0, .pure(.open)) })
+    }
+
+    // MARK: - Empty / perfect
+
     @Test func emptyAnswerGradesAllCells() {
-        let result = ChartRecallGrading.grade(painted: [:], against: makeSmallChart())
+        let result = ChartRecallGrading.grade(painted: [:], against: makeSmallRFIChart())
         #expect(result.totalCells == 169)
     }
 
     @Test func emptyAnswerMarksChartOpensAsMissed() {
-        let result = ChartRecallGrading.grade(painted: [:], against: makeSmallChart())
+        let result = ChartRecallGrading.grade(painted: [:], against: makeSmallRFIChart())
         #expect(result.missedCount == 3)
-        // 169 - 3 open = 166 correct folds
-        #expect(result.correctCount == 166)
+        #expect(result.correctCount == 166)   // 169 - 3
         #expect(result.wrongExtraCount == 0)
         #expect(result.wrongActionCount == 0)
     }
 
     @Test func perfectAnswerScores100() {
-        let chart = makeSmallChart()
-        let painted: [HandClass: Action] = [
-            HandClass("AA")!: .open,
-            HandClass("AKs")!: .open,
-            HandClass("AKo")!: .open,
-        ]
+        let chart = makeSmallRFIChart()
+        let painted = open("AA", "AKs", "AKo")
         let result = ChartRecallGrading.grade(painted: painted, against: chart)
         #expect(result.correctCount == 169)
         #expect(result.missedCount == 0)
         #expect(result.accuracy == 1.0)
     }
 
+    // MARK: - Mistakes on pure-open chart
+
     @Test func extraOpenIsWrongExtra() {
-        let chart = makeSmallChart()
+        let chart = makeSmallRFIChart()
         // User opened QQ too, which chart says is fold.
-        let painted: [HandClass: Action] = [
-            HandClass("AA")!: .open,
-            HandClass("AKs")!: .open,
-            HandClass("AKo")!: .open,
-            HandClass("QQ")!: .open,
-        ]
+        let painted = open("AA", "AKs", "AKo", "QQ")
         let result = ChartRecallGrading.grade(painted: painted, against: chart)
-        #expect(result.correctCount == 168)
         #expect(result.wrongExtraCount == 1)
         if case .wrongExtra(let a) = result.grades[HandClass("QQ")!]! {
-            #expect(a == .open)
+            #expect(a == .pure(.open))
         } else {
             Issue.record("QQ should be wrongExtra")
         }
     }
 
     @Test func missedHandMarkedMissed() {
-        let chart = makeSmallChart()
-        // User folded AA (chart says open).
-        let painted: [HandClass: Action] = [
-            HandClass("AKs")!: .open,
-            HandClass("AKo")!: .open,
-        ]
+        let chart = makeSmallRFIChart()
+        let painted = open("AKs", "AKo")
         let result = ChartRecallGrading.grade(painted: painted, against: chart)
         #expect(result.missedCount == 1)
         if case .missed(let e) = result.grades[HandClass("AA")!]! {
-            #expect(e == .open)
+            #expect(e == .pure(.open))
         } else {
             Issue.record("AA should be missed")
         }
     }
 
-    @Test func wrongActionWithMixedExpected() {
-        // Build a chart with a mixed cell and verify behavior.
+    // MARK: - Mixed chart cells
+
+    private func makeMixedChart() -> Chart {
         let scenario = Scenario(hero: .sb, priorAction: .facingOpen(from: .co))
-        let chart = Chart(
+        return Chart(
             scenario: scenario,
             entries: [
                 HandClass("AKs")!: .mixed(aggressive: .threeBet, passive: .call),
             ]
         )
-        // User plays call — chart contains call → correct.
-        let r1 = ChartRecallGrading.grade(painted: [HandClass("AKs")!: .call], against: chart)
-        #expect(r1.grades[HandClass("AKs")!] == .correct)
-        // User plays threeBet — chart contains threeBet → correct.
-        let r2 = ChartRecallGrading.grade(painted: [HandClass("AKs")!: .threeBet], against: chart)
-        #expect(r2.grades[HandClass("AKs")!] == .correct)
-        // User plays fold — mixed cell's primary is threeBet → missed(threeBet).
-        let r3 = ChartRecallGrading.grade(painted: [HandClass("AKs")!: .fold], against: chart)
-        if case .missed(let e) = r3.grades[HandClass("AKs")!]! {
-            #expect(e == .threeBet)
+    }
+
+    @Test func paintedMixedMatchingChartMixedIsCorrect() {
+        let chart = makeMixedChart()
+        let painted: [HandClass: RecallAnswer] = [
+            HandClass("AKs")!: .mixed(aggressive: .threeBet, passive: .call),
+        ]
+        let result = ChartRecallGrading.grade(painted: painted, against: chart)
+        #expect(result.grades[HandClass("AKs")!] == .correct)
+    }
+
+    @Test func paintedPureThreeBetOnMixedCellIsWrongAction() {
+        let chart = makeMixedChart()
+        let painted: [HandClass: RecallAnswer] = [
+            HandClass("AKs")!: .pure(.threeBet),
+        ]
+        let result = ChartRecallGrading.grade(painted: painted, against: chart)
+        if case .wrongAction(let a, let e) = result.grades[HandClass("AKs")!]! {
+            #expect(a == .pure(.threeBet))
+            #expect(e == .mixed(aggressive: .threeBet, passive: .call))
         } else {
-            Issue.record("Expected missed for fold vs mixed cell")
+            Issue.record("Pure 3-bet on mixed cell should be wrongAction")
         }
+    }
+
+    @Test func paintedFoldOnMixedCellIsMissed() {
+        let chart = makeMixedChart()
+        // No painting at all = implicit fold
+        let result = ChartRecallGrading.grade(painted: [:], against: chart)
+        if case .missed(let e) = result.grades[HandClass("AKs")!]! {
+            #expect(e == .mixed(aggressive: .threeBet, passive: .call))
+        } else {
+            Issue.record("Empty paint on mixed cell should be missed")
+        }
+    }
+
+    @Test func wrongActionCountsTracked() {
+        let chart = makeMixedChart()
+        let painted: [HandClass: RecallAnswer] = [
+            HandClass("AKs")!: .pure(.call),
+        ]
+        let result = ChartRecallGrading.grade(painted: painted, against: chart)
+        #expect(result.wrongActionCount == 1)
+        #expect(result.missedCount == 0)
+        #expect(result.wrongExtraCount == 0)
     }
 }
