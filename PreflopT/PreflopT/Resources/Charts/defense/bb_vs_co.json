@@ -1,0 +1,7 @@
+{
+  "scenario": "def.bb.vs.co",
+  "chartType": "defense",
+  "threeBet": "AA, KK, QQ, JJ, AKs, AQs, AJs, A5s, KQs, KJs, QJs, QTs, JTs, J9s, T9s, AKo",
+  "mixed3betCall": "TT, 99, A9s, A8s, KTs, 98s, 87s, 76s, 65s, 54s",
+  "call": "88, 77, 66, 55, 44, 33, 22, ATs, A7s, A6s, A4s, A3s, A2s, K9s, K8s, K7s, K6s, K5s, K4s, K3s, K2s, Q9s, Q8s, Q7s, Q6s, Q5s, Q4s, Q3s, Q2s, J8s, J7s, J6s, J5s, J4s, T8s, T7s, T6s, 97s, 96s, 95s, 86s, 85s, 75s, 74s, 64s, 63s, 53s, 52s, 43s, AQo, AJo, ATo, A9o, A8o, A5o, KQo, KJo, KTo, QJo, JTo, T9o"
+}
