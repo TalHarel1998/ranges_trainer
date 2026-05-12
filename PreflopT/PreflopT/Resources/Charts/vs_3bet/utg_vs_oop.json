@@ -1,0 +1,7 @@
+{
+  "scenario": "vs3b.utg.vs.oop",
+  "chartType": "vs3bet",
+  "fourBet": "AA, KK, AKs, AKo",
+  "mixed4betCall": "A5s, KTs",
+  "call": "QQ, JJ, TT, AQs, AJs, KQs, KJs, QJs"
+}

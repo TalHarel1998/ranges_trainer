@@ -18,6 +18,7 @@ enum ChartCategory: String, CaseIterable, Hashable, Identifiable {
     case btnDefense
     case sbDefense
     case bbDefense
+    case utgVs3bet
 
     var id: String { rawValue }
 
@@ -27,6 +28,7 @@ enum ChartCategory: String, CaseIterable, Hashable, Identifiable {
         case .btnDefense: return "BTN defense"
         case .sbDefense:  return "SB defense"
         case .bbDefense:  return "BB defense"
+        case .utgVs3bet:  return "UTG vs 3-Bet"
         }
     }
 
@@ -49,6 +51,9 @@ enum ChartCategory: String, CaseIterable, Hashable, Identifiable {
 
         case .bbDefense:
             return defenseCharts(from: all, hero: .bb)
+
+        case .utgVs3bet:
+            return vs3betCharts(from: all, hero: .utg)
         }
     }
 
@@ -63,6 +68,21 @@ enum ChartCategory: String, CaseIterable, Hashable, Identifiable {
                       case .facingOpen(let r) = rhs.scenario.priorAction
                 else { return false }
                 return l.actionOrder < r.actionOrder
+            }
+    }
+
+    private func vs3betCharts(from all: [Chart], hero: Position) -> [Chart] {
+        all.filter {
+                guard $0.scenario.hero == hero else { return false }
+                if case .facingThreeBet = $0.scenario.priorAction { return true }
+                return false
+            }
+            .sorted { lhs, rhs in
+                // IP (tighter 3-bettors) listed before OOP (looser blinds).
+                guard case .facingThreeBet(let l) = lhs.scenario.priorAction,
+                      case .facingThreeBet(let r) = rhs.scenario.priorAction
+                else { return false }
+                return l == .ip && r == .oop
             }
     }
 }
@@ -151,6 +171,8 @@ private struct CategoryChartListView: View {
             RFIChartRow(chart: chart)
         case .btnDefense, .sbDefense, .bbDefense:
             DefenseChartRow(chart: chart)
+        case .utgVs3bet:
+            ThreeBetChartRow(chart: chart)
         }
     }
 }
@@ -229,6 +251,65 @@ private struct DefenseChartRow: View {
     private var threeBetCombos: Int {
         chart.entries.reduce(into: 0) { partial, entry in
             if case .pure(.threeBet) = entry.value {
+                partial += entry.key.comboCount
+            }
+        }
+    }
+
+    private var mixedCombos: Int {
+        chart.entries.reduce(into: 0) { partial, entry in
+            if case .mixed = entry.value {
+                partial += entry.key.comboCount
+            }
+        }
+    }
+
+    private var callCombos: Int {
+        chart.entries.reduce(into: 0) { partial, entry in
+            if case .pure(.call) = entry.value {
+                partial += entry.key.comboCount
+            }
+        }
+    }
+}
+
+private struct ThreeBetChartRow: View {
+    let chart: Chart
+
+    var body: some View {
+        HStack {
+            Text(chart.scenario.threeBettorGroupTitle ?? "?")
+                .font(.headline)
+                .frame(minWidth: 110, alignment: .leading)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("vs 3-Bet")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            VStack(alignment: .trailing, spacing: 2) {
+                if fourBetCombos > 0 {
+                    Text("\(fourBetCombos) 4-bet")
+                        .foregroundStyle(ActionPalette.fill(for: .fourBet))
+                }
+                if mixedCombos > 0 {
+                    Text("\(mixedCombos) mix")
+                        .foregroundStyle(ActionPalette.mixedFill)
+                }
+                if callCombos > 0 {
+                    Text("\(callCombos) call")
+                        .foregroundStyle(ActionPalette.fill(for: .call))
+                }
+            }
+            .font(.caption)
+            .monospacedDigit()
+        }
+        .padding(.vertical, 4)
+    }
+
+    private var fourBetCombos: Int {
+        chart.entries.reduce(into: 0) { partial, entry in
+            if case .pure(.fourBet) = entry.value {
                 partial += entry.key.comboCount
             }
         }

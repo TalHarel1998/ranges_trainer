@@ -114,7 +114,8 @@ struct ChartDTO: Decodable {
     let mixed3betCall: String?
     let mixed3betFold: String?
     let call: String?
-    let fourBet: String?  // for future vs-3bet charts
+    let fourBet: String?          // vs-3bet: pure 4-bet
+    let mixed4betCall: String?    // vs-3bet: mixed 4-bet / call
 
     enum ChartType: String {
         case rfi
@@ -190,12 +191,23 @@ struct ChartDTO: Decodable {
             for h in pureCall { entries[h] = .pure(.call) }
 
         case .vs3bet:
-            let fourBetHands = try expand(fourBet ?? "", field: "fourBet")
-            let callHands = try expand(call ?? "", field: "call")
-            for h in fourBetHands { entries[h] = .pure(.fourBet) }
-            for h in callHands where entries[h] == nil {
-                entries[h] = .pure(.call)
+            let pureFourBet  = try expand(fourBet ?? "",       field: "fourBet")
+            let mixedCall    = try expand(mixed4betCall ?? "", field: "mixed4betCall")
+            let pureCall     = try expand(call ?? "",          field: "call")
+
+            if let dup = firstOverlap(among: [
+                ("fourBet", pureFourBet),
+                ("mixed4betCall", mixedCall),
+                ("call", pureCall),
+            ]) {
+                throw DecodeError.overlappingRanges(
+                    chartType: chartType, hand: dup.hand, fields: dup.fields
+                )
             }
+
+            for h in pureFourBet { entries[h] = .pure(.fourBet) }
+            for h in mixedCall   { entries[h] = .mixed(aggressive: .fourBet, passive: .call) }
+            for h in pureCall    { entries[h] = .pure(.call) }
 
         case .vs4bet:
             // To be defined when we ship vs-4bet charts.

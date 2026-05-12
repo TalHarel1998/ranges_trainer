@@ -41,6 +41,9 @@ struct ChartRecallView: View {
             return "\(hero) RFI · Recall"
         case .facingOpen(let villain):
             return "\(hero) vs \(villain.rawValue) · Recall"
+        case .facingThreeBet:
+            let suffix = viewModel.chart.scenario.threeBettorGroupTitle ?? "vs 3-Bet"
+            return "\(hero) \(suffix) · Recall"
         }
     }
 
@@ -62,7 +65,7 @@ struct ChartRecallView: View {
         switch viewModel.chart.scenario.priorAction {
         case .firstToAct:
             return "Tap the hands you would open."
-        case .facingOpen:
+        case .facingOpen, .facingThreeBet:
             return "Tap cells with the action you would take."
         }
     }

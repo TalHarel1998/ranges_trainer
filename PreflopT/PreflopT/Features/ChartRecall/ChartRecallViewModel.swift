@@ -57,14 +57,18 @@ final class ChartRecallViewModel {
         var hasPureCall = false
         var hasPureOpen = false
         var hasPureThreeBet = false
+        var hasPureFourBet = false
+        var hasMixedFourBetCall = false
 
         for action in chart.entries.values {
             switch action {
             case .pure(.open):     hasPureOpen = true
             case .pure(.threeBet): hasPureThreeBet = true
+            case .pure(.fourBet):  hasPureFourBet = true
             case .pure(.call):     hasPureCall = true
             case .mixed(.threeBet, .call): hasMixedCall = true
             case .mixed(.threeBet, .fold): hasMixedFold = true
+            case .mixed(.fourBet, .call):  hasMixedFourBetCall = true
             default: break
             }
         }
@@ -73,8 +77,17 @@ final class ChartRecallViewModel {
         if hasPureOpen {
             options.append(PaletteOption(answer: .pure(.open), label: "Open"))
         }
+        if hasPureFourBet {
+            options.append(PaletteOption(answer: .pure(.fourBet), label: "4-Bet"))
+        }
         if hasPureThreeBet {
             options.append(PaletteOption(answer: .pure(.threeBet), label: "3-Bet"))
+        }
+        if hasMixedFourBetCall {
+            options.append(PaletteOption(
+                answer: .mixed(aggressive: .fourBet, passive: .call),
+                label: "4-Bet/Call"
+            ))
         }
         if hasMixedCall {
             options.append(PaletteOption(
