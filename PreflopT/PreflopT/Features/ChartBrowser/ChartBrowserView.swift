@@ -154,7 +154,19 @@ struct ChartBrowserView: View {
             }
             .navigationTitle("GG 6-Max Cash Ranges")
             .navigationDestination(for: ChartCategory.self) { category in
-                CategoryChartListView(category: category)
+                if category == .rfi {
+                    if let unified = UnifiedRFIChart(from: repository.allCharts()) {
+                        UnifiedRFIChartView(chart: unified)
+                    } else {
+                        ContentUnavailableView(
+                            "RFI charts missing",
+                            systemImage: "questionmark.folder",
+                            description: Text("Expected RFI charts for UTG, MP, CO, BTN.")
+                        )
+                    }
+                } else {
+                    CategoryChartListView(category: category)
+                }
             }
             .navigationDestination(for: String.self) { scenarioKey in
                 if let scenario = Scenario(key: scenarioKey),
@@ -180,11 +192,16 @@ private struct CategoryRow: View {
         VStack(alignment: .leading, spacing: 2) {
             Text(category.title)
                 .font(.headline)
-            Text("\(chartCount) chart\(chartCount == 1 ? "" : "s")")
+            Text(subtitle)
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
         .padding(.vertical, 4)
+    }
+
+    private var subtitle: String {
+        if category == .rfi { return "Unified — all positions" }
+        return "\(chartCount) chart\(chartCount == 1 ? "" : "s")"
     }
 }
 

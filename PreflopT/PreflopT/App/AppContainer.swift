@@ -13,13 +13,16 @@ import SwiftUI
 final class AppContainer {
     let chartRepository: ChartRepository
     let colorPaletteStore: ColorPaletteStore
+    let rfiColorPaletteStore: RFIColorPaletteStore
 
     init(
         chartRepository: ChartRepository,
-        colorPaletteStore: ColorPaletteStore = ColorPaletteStore()
+        colorPaletteStore: ColorPaletteStore = ColorPaletteStore(),
+        rfiColorPaletteStore: RFIColorPaletteStore = RFIColorPaletteStore()
     ) {
         self.chartRepository = chartRepository
         self.colorPaletteStore = colorPaletteStore
+        self.rfiColorPaletteStore = rfiColorPaletteStore
     }
 
     /// The real container used in production: loads bundled chart JSON.
@@ -59,6 +62,20 @@ extension EnvironmentValues {
     var colorPaletteStore: ColorPaletteStore {
         get { self[ColorPaletteStoreKey.self] }
         set { self[ColorPaletteStoreKey.self] = newValue }
+    }
+}
+
+private struct RFIColorPaletteStoreKey: EnvironmentKey {
+    /// Preview/test default, not persisted.
+    static let defaultValue: RFIColorPaletteStore = RFIColorPaletteStore(
+        defaults: UserDefaults(suiteName: "PreflopTPreviewRFIDefaults") ?? .standard
+    )
+}
+
+extension EnvironmentValues {
+    var rfiColorPaletteStore: RFIColorPaletteStore {
+        get { self[RFIColorPaletteStoreKey.self] }
+        set { self[RFIColorPaletteStoreKey.self] = newValue }
     }
 }
 
