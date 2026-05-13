@@ -64,6 +64,7 @@ public final class BundledChartRepository: ChartRepository {
         ("utg_vs_oop", "vs3b.utg.vs.oop"),
         ("co_vs_ip",   "vs3b.co.vs.ip"),
         ("co_vs_oop",  "vs3b.co.vs.oop"),
+        ("btn_vs_oop", "vs3b.btn.vs.oop"),
     ]
 
     private let bundle: Bundle
