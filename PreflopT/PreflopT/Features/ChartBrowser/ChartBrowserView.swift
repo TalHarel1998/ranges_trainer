@@ -385,7 +385,7 @@ private struct FourBetChartRow: View {
             Spacer()
             VStack(alignment: .trailing, spacing: 2) {
                 if fiveBetCombos > 0 {
-                    Text("\(fiveBetCombos) 5-bet")
+                    Text("\(fiveBetCombos) all-in")
                         .foregroundStyle(ActionPalette.fill(for: .fiveBet))
                 }
                 if mixedCombos > 0 {

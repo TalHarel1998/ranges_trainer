@@ -234,11 +234,11 @@ struct ChartDetailView: View {
             let foldFrac = max(0, 1 - pureFrac - mixFrac - callFrac)
 
             var items: [LegendItem] = [
-                LegendItem(color: ActionPalette.fill(for: .fiveBet), label: "5-Bet", fraction: pureFrac),
+                LegendItem(color: ActionPalette.fill(for: .fiveBet), label: "All-In", fraction: pureFrac),
             ]
             if mixFrac > 0 {
                 items.append(LegendItem(color: ActionPalette.mixedFill,
-                                        label: "5-Bet/Call",
+                                        label: "All-In/Call",
                                         fraction: mixFrac))
             }
             if callFrac > 0 {

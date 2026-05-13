@@ -82,7 +82,7 @@ final class ChartRecallViewModel {
             options.append(PaletteOption(answer: .pure(.open), label: "Open"))
         }
         if hasPureFiveBet {
-            options.append(PaletteOption(answer: .pure(.fiveBet), label: "5-Bet"))
+            options.append(PaletteOption(answer: .pure(.fiveBet), label: "All-In"))
         }
         if hasPureFourBet {
             options.append(PaletteOption(answer: .pure(.fourBet), label: "4-Bet"))
@@ -93,7 +93,7 @@ final class ChartRecallViewModel {
         if hasMixedFiveBetCall {
             options.append(PaletteOption(
                 answer: .mixed(aggressive: .fiveBet, passive: .call),
-                label: "5-Bet/Call"
+                label: "All-In/Call"
             ))
         }
         if hasMixedFourBetCall {
