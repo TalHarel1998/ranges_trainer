@@ -17,8 +17,8 @@ final class AppContainer {
 
     init(
         chartRepository: ChartRepository,
-        colorPaletteStore: ColorPaletteStore = ColorPaletteStore(),
-        rfiColorPaletteStore: RFIColorPaletteStore = RFIColorPaletteStore()
+        colorPaletteStore: ColorPaletteStore,
+        rfiColorPaletteStore: RFIColorPaletteStore
     ) {
         self.chartRepository = chartRepository
         self.colorPaletteStore = colorPaletteStore
@@ -30,7 +30,13 @@ final class AppContainer {
     static func live() -> AppContainer {
         do {
             let repo = try BundledChartRepository()
-            return AppContainer(chartRepository: repo)
+            // Construct stores here rather than as default args so their
+            // initializers run inside the @MainActor class isolation context.
+            return AppContainer(
+                chartRepository: repo,
+                colorPaletteStore: ColorPaletteStore(),
+                rfiColorPaletteStore: RFIColorPaletteStore()
+            )
         } catch {
             fatalError("Fatal: failed to load bundled chart data: \(error)")
         }
