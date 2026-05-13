@@ -401,6 +401,8 @@ ranges_trainer/
 - Spaced-repetition scheduling of weak hand classes.
 - In-app chart editing UI.
 - iCloud sync.
+- Dark mode across the whole app.
+- User-customizable chart palette (swap red / yellow / green for any color).
 
 ## 7. Decisions log
 

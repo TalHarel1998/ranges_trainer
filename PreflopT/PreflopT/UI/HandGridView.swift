@@ -30,19 +30,23 @@ enum ActionPalette {
     static func fill(for action: Action) -> Color {
         switch action {
         case .fold:     return Color(.systemGray5)
-        case .call:     return Color(red: 0.96, green: 0.80, blue: 0.20)   // yellow
-        case .open:     return Color(red: 0.22, green: 0.70, blue: 0.35)   // green
+        case .call:     return Color(red: 0.22, green: 0.70, blue: 0.35)   // green
+        // All "aggressive" pure actions share red. Within any single chart
+        // only one of these appears (RFI uses .open, defense uses .threeBet,
+        // vs-3-bet uses .fourBet, vs-4-bet uses .fiveBet), so there's no
+        // ambiguity. The shared color expresses "take the most aggressive
+        // line available for this spot".
+        case .open:     return Color(red: 0.92, green: 0.30, blue: 0.30)   // red
         case .threeBet: return Color(red: 0.92, green: 0.30, blue: 0.30)   // red
-        case .fourBet:  return Color(red: 0.60, green: 0.20, blue: 0.75)   // purple
-        case .fiveBet:  return Color(red: 0.95, green: 0.45, blue: 0.05)   // orange
+        case .fourBet:  return Color(red: 0.92, green: 0.30, blue: 0.30)   // red
+        case .fiveBet:  return Color(red: 0.92, green: 0.30, blue: 0.30)   // red
         }
     }
 
-    /// Color used for mixed-action chart cells. Kept separate from
-    /// `fill(for: .call)` so pure-call (yellow) and mixed cells (blue)
-    /// remain visually distinct.
+    /// Color used for mixed-action chart cells. Yellow — distinct from pure
+    /// call (green) and pure aggressive (red).
     static var mixedFill: Color {
-        Color(red: 0.30, green: 0.62, blue: 0.93)   // blue
+        Color(red: 0.96, green: 0.80, blue: 0.20)   // yellow
     }
 
     static func fill(for chartAction: ChartAction) -> Color {
@@ -58,17 +62,15 @@ enum ActionPalette {
     static func foreground(for chartAction: ChartAction) -> Color {
         switch chartAction {
         case .pure(.fold): return .primary.opacity(0.8)
-        case .pure(.call): return .primary.opacity(0.85)   // dark text on yellow
-        case .pure:        return .white
-        case .mixed:       return .white
+        case .mixed:       return .primary.opacity(0.85)   // dark text on yellow
+        case .pure:        return .white                   // white on green or red
         }
     }
 
     static func foreground(for action: Action) -> Color {
         switch action {
         case .fold: return .primary.opacity(0.8)
-        case .call: return .primary.opacity(0.85)
-        default:    return .white
+        default:    return .white                          // white on green or red
         }
     }
 }
