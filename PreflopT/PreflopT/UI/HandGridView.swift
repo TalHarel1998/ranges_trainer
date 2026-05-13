@@ -34,6 +34,7 @@ enum ActionPalette {
         case .open:     return Color(red: 0.22, green: 0.70, blue: 0.35)   // green
         case .threeBet: return Color(red: 0.92, green: 0.30, blue: 0.30)   // red
         case .fourBet:  return Color(red: 0.60, green: 0.20, blue: 0.75)   // purple
+        case .fiveBet:  return Color(red: 0.95, green: 0.45, blue: 0.05)   // orange
         }
     }
 

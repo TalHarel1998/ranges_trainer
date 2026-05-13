@@ -33,6 +33,12 @@ public enum PriorAction: Hashable, Sendable {
     /// Hero opened and is now facing a 3-bet from the given villain group.
     /// Used for "vs 3-bet" charts.
     case facingThreeBet(from: ThreeBettorGroup)
+
+    /// Hero 3-bet and is now facing a 4-bet from the given villain position.
+    /// Used for "vs 4-bet" charts. Unlike vs-3-bet (which groups symmetric
+    /// 3-bettors), each 4-bettor has a distinct range so charts are keyed
+    /// per-villain.
+    case facingFourBet(from: Position)
 }
 
 public struct Scenario: Hashable, Sendable {
@@ -48,6 +54,7 @@ public struct Scenario: Hashable, Sendable {
     ///   RFI:       rfi.<hero>                      (e.g. "rfi.btn")
     ///   Defense:   def.<hero>.vs.<villain>         (e.g. "def.sb.vs.co")
     ///   vs 3-bet:  vs3b.<hero>.vs.<group>          (e.g. "vs3b.utg.vs.ip")
+    ///   vs 4-bet:  vs4b.<hero>.vs.<villain>        (e.g. "vs4b.btn.vs.co")
     public var key: String {
         let hero = hero.rawValue.lowercased()
         switch priorAction {
@@ -57,6 +64,8 @@ public struct Scenario: Hashable, Sendable {
             return "def.\(hero).vs.\(villain.rawValue.lowercased())"
         case .facingThreeBet(let group):
             return "vs3b.\(hero).vs.\(group.rawValue)"
+        case .facingFourBet(let villain):
+            return "vs4b.\(hero).vs.\(villain.rawValue.lowercased())"
         }
     }
 
@@ -90,6 +99,15 @@ public struct Scenario: Hashable, Sendable {
                   let group = ThreeBettorGroup(rawValue: parts[3])
             else { return nil }
             self.init(hero: hero, priorAction: .facingThreeBet(from: group))
+
+        case "vs4b":
+            // Expected: ["vs4b", hero, "vs", villain]
+            guard parts.count == 4,
+                  parts[2] == "vs",
+                  let hero = Position(rawValue: parts[1].uppercased()),
+                  let villain = Position(rawValue: parts[3].uppercased())
+            else { return nil }
+            self.init(hero: hero, priorAction: .facingFourBet(from: villain))
 
         default:
             return nil

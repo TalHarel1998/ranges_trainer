@@ -116,6 +116,8 @@ struct ChartDTO: Decodable {
     let call: String?
     let fourBet: String?          // vs-3bet: pure 4-bet
     let mixed4betCall: String?    // vs-3bet: mixed 4-bet / call
+    let fiveBet: String?          // vs-4bet: pure 5-bet / all-in
+    let mixed5betCall: String?    // vs-4bet: mixed 5-bet / call
 
     enum ChartType: String {
         case rfi
@@ -210,8 +212,23 @@ struct ChartDTO: Decodable {
             for h in pureCall    { entries[h] = .pure(.call) }
 
         case .vs4bet:
-            // To be defined when we ship vs-4bet charts.
-            throw DecodeError.unknownChartType("vs4bet (not yet implemented)")
+            let pureFiveBet  = try expand(fiveBet ?? "",       field: "fiveBet")
+            let mixedCall    = try expand(mixed5betCall ?? "", field: "mixed5betCall")
+            let pureCall     = try expand(call ?? "",          field: "call")
+
+            if let dup = firstOverlap(among: [
+                ("fiveBet", pureFiveBet),
+                ("mixed5betCall", mixedCall),
+                ("call", pureCall),
+            ]) {
+                throw DecodeError.overlappingRanges(
+                    chartType: chartType, hand: dup.hand, fields: dup.fields
+                )
+            }
+
+            for h in pureFiveBet { entries[h] = .pure(.fiveBet) }
+            for h in mixedCall   { entries[h] = .mixed(aggressive: .fiveBet, passive: .call) }
+            for h in pureCall    { entries[h] = .pure(.call) }
         }
 
         return Chart(

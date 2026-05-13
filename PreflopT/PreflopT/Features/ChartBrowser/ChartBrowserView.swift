@@ -22,6 +22,7 @@ enum ChartCategory: String, CaseIterable, Hashable, Identifiable {
     case coVs3bet
     case btnVs3bet
     case sbVs3bet
+    case btnVs4bet
 
     var id: String { rawValue }
 
@@ -35,6 +36,7 @@ enum ChartCategory: String, CaseIterable, Hashable, Identifiable {
         case .coVs3bet:   return "CO vs 3-Bet"
         case .btnVs3bet:  return "BTN vs 3-Bet"
         case .sbVs3bet:   return "SB vs 3-Bet"
+        case .btnVs4bet:  return "BTN vs 4-Bet"
         }
     }
 
@@ -69,6 +71,9 @@ enum ChartCategory: String, CaseIterable, Hashable, Identifiable {
 
         case .sbVs3bet:
             return vs3betCharts(from: all, hero: .sb)
+
+        case .btnVs4bet:
+            return vs4betCharts(from: all, hero: .btn)
         }
     }
 
@@ -98,6 +103,21 @@ enum ChartCategory: String, CaseIterable, Hashable, Identifiable {
                       case .facingThreeBet(let r) = rhs.scenario.priorAction
                 else { return false }
                 return l == .ip && r == .oop
+            }
+    }
+
+    private func vs4betCharts(from all: [Chart], hero: Position) -> [Chart] {
+        all.filter {
+                guard $0.scenario.hero == hero else { return false }
+                if case .facingFourBet = $0.scenario.priorAction { return true }
+                return false
+            }
+            .sorted { lhs, rhs in
+                // Order by 4-bettor position (UTG-tight before CO-wide).
+                guard case .facingFourBet(let l) = lhs.scenario.priorAction,
+                      case .facingFourBet(let r) = rhs.scenario.priorAction
+                else { return false }
+                return l.actionOrder < r.actionOrder
             }
     }
 }
@@ -188,6 +208,8 @@ private struct CategoryChartListView: View {
             DefenseChartRow(chart: chart)
         case .utgVs3bet, .coVs3bet, .btnVs3bet, .sbVs3bet:
             ThreeBetChartRow(chart: chart)
+        case .btnVs4bet:
+            FourBetChartRow(chart: chart)
         }
     }
 }
@@ -347,7 +369,71 @@ private struct ThreeBetChartRow: View {
     }
 }
 
-// MARK: - Preview
+private struct FourBetChartRow: View {
+    let chart: Chart
+
+    var body: some View {
+        HStack {
+            Text(villainLabel)
+                .font(.headline)
+                .frame(minWidth: 80, alignment: .leading)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("vs 4-Bet")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            VStack(alignment: .trailing, spacing: 2) {
+                if fiveBetCombos > 0 {
+                    Text("\(fiveBetCombos) 5-bet")
+                        .foregroundStyle(ActionPalette.fill(for: .fiveBet))
+                }
+                if mixedCombos > 0 {
+                    Text("\(mixedCombos) mix")
+                        .foregroundStyle(ActionPalette.mixedFill)
+                }
+                if callCombos > 0 {
+                    Text("\(callCombos) call")
+                        .foregroundStyle(ActionPalette.fill(for: .call))
+                }
+            }
+            .font(.caption)
+            .monospacedDigit()
+        }
+        .padding(.vertical, 4)
+    }
+
+    private var villainLabel: String {
+        if case .facingFourBet(let villain) = chart.scenario.priorAction {
+            return "vs \(villain.rawValue)"
+        }
+        return "?"
+    }
+
+    private var fiveBetCombos: Int {
+        chart.entries.reduce(into: 0) { partial, entry in
+            if case .pure(.fiveBet) = entry.value {
+                partial += entry.key.comboCount
+            }
+        }
+    }
+
+    private var mixedCombos: Int {
+        chart.entries.reduce(into: 0) { partial, entry in
+            if case .mixed = entry.value {
+                partial += entry.key.comboCount
+            }
+        }
+    }
+
+    private var callCombos: Int {
+        chart.entries.reduce(into: 0) { partial, entry in
+            if case .pure(.call) = entry.value {
+                partial += entry.key.comboCount
+            }
+        }
+    }
+}
 
 #Preview {
     ChartBrowserView()

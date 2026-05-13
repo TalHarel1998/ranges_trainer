@@ -17,6 +17,7 @@ public enum Action: String, Codable, Hashable, CaseIterable, Comparable, Sendabl
     case open     = "open"
     case threeBet = "3bet"
     case fourBet  = "4bet"
+    case fiveBet  = "5bet"
 
     public var aggressionRank: Int {
         switch self {
@@ -25,6 +26,7 @@ public enum Action: String, Codable, Hashable, CaseIterable, Comparable, Sendabl
         case .open:     return 2
         case .threeBet: return 3
         case .fourBet:  return 4
+        case .fiveBet:  return 5
         }
     }
 

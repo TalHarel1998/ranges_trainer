@@ -66,6 +66,9 @@ struct ChartDetailView: View {
             // e.g. "UTG vs MP-BTN"
             let suffix = chart.scenario.threeBettorGroupTitle ?? "vs 3-Bet"
             return "\(chart.scenario.hero.rawValue) \(suffix)"
+        case .facingFourBet(let villain):
+            // e.g. "BTN vs UTG 4-Bet"
+            return "\(chart.scenario.hero.rawValue) vs \(villain.rawValue) 4-Bet"
         }
     }
 
@@ -195,6 +198,47 @@ struct ChartDetailView: View {
             if mixFrac > 0 {
                 items.append(LegendItem(color: ActionPalette.mixedFill,
                                         label: "4-Bet/Call",
+                                        fraction: mixFrac))
+            }
+            if callFrac > 0 {
+                items.append(LegendItem(color: ActionPalette.fill(for: .call),
+                                        label: "Call",
+                                        fraction: callFrac))
+            }
+            items.append(LegendItem(color: ActionPalette.fill(for: .fold),
+                                    label: "Fold",
+                                    fraction: foldFrac))
+            return items
+
+        case .facingFourBet:
+            // Buckets: pure 5-bet / mixed 5-bet/call / call / fold.
+            var pure5bet = 0
+            var mixed5betCall = 0
+            var pureCall = 0
+            for (hand, action) in chart.entries {
+                switch action {
+                case .pure(.fiveBet):
+                    pure5bet += hand.comboCount
+                case .mixed(.fiveBet, .call):
+                    mixed5betCall += hand.comboCount
+                case .pure(.call):
+                    pureCall += hand.comboCount
+                default:
+                    break
+                }
+            }
+            let total = 1326.0
+            let pureFrac = Double(pure5bet) / total
+            let mixFrac  = Double(mixed5betCall) / total
+            let callFrac = Double(pureCall) / total
+            let foldFrac = max(0, 1 - pureFrac - mixFrac - callFrac)
+
+            var items: [LegendItem] = [
+                LegendItem(color: ActionPalette.fill(for: .fiveBet), label: "5-Bet", fraction: pureFrac),
+            ]
+            if mixFrac > 0 {
+                items.append(LegendItem(color: ActionPalette.mixedFill,
+                                        label: "5-Bet/Call",
                                         fraction: mixFrac))
             }
             if callFrac > 0 {
