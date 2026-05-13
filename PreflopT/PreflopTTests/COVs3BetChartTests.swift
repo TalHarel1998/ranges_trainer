@@ -37,8 +37,8 @@ struct COVs3BetTests {
         let calls  = c.entries.values.filter { if case .pure(.call) = $0 { return true } else { return false } }.count
         #expect(pure4b == 5)
         #expect(mix == 9)
-        #expect(calls == 21)
-        #expect(pure4b + mix + calls == 35)
+        #expect(calls == 22)
+        #expect(pure4b + mix + calls == 36)
     }
 
     @Test func coVsIpSpecificEntries() throws {
@@ -66,6 +66,7 @@ struct COVs3BetTests {
         #expect(c.action(for: HandClass("AQs")!) == .pure(.call))
         #expect(c.action(for: HandClass("ATs")!) == .pure(.call))
         #expect(c.action(for: HandClass("QJs")!) == .pure(.call))
+        #expect(c.action(for: HandClass("QTs")!) == .pure(.call))
         #expect(c.action(for: HandClass("T9s")!) == .pure(.call))
         #expect(c.action(for: HandClass("65s")!) == .pure(.call))
         // Folds (offsuit broadways below AQo, weak suited gappers)

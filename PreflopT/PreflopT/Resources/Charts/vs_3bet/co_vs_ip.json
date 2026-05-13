@@ -3,5 +3,5 @@
   "chartType": "vs3bet",
   "fourBet": "AA, KK, QQ, AKs, AKo",
   "mixed4betCall": "JJ, TT, KQs, KJs, KTs, K9s, A7s, AQo, KQo",
-  "call": "99, 88, 77, 66, 55, 44, 33, 22, AQs, AJs, ATs, A9s, A8s, A5s, A4s, QJs, JTs, J9s, T9s, 87s, 65s"
+  "call": "99, 88, 77, 66, 55, 44, 33, 22, AQs, AJs, ATs, A9s, A8s, A5s, A4s, QJs, QTs, JTs, J9s, T9s, 87s, 65s"
 }
