@@ -15,6 +15,7 @@ struct PreflopTApp: App {
         WindowGroup {
             ContentView()
                 .environment(\.chartRepository, container.chartRepository)
+                .environment(\.colorPaletteStore, container.colorPaletteStore)
         }
     }
 }

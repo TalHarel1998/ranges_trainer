@@ -9,6 +9,9 @@ import SwiftUI
 
 struct ChartRecallView: View {
     @State private var viewModel: ChartRecallViewModel
+    @Environment(\.colorPaletteStore) private var paletteStore
+
+    private var palette: ColorPalette { paletteStore.palette }
 
     init(chart: Chart) {
         _viewModel = State(wrappedValue: ChartRecallViewModel(chart: chart))
@@ -117,8 +120,8 @@ struct ChartRecallView: View {
             return style(forAnswer: answer)
         }
         return HandCellStyle(
-            fill: ActionPalette.fill(for: .fold),
-            foreground: ActionPalette.foreground(for: .fold)
+            fill: palette.color(for: .fold),
+            foreground: palette.foreground(for: .fold)
         )
     }
 
@@ -128,11 +131,15 @@ struct ChartRecallView: View {
         switch answer {
         case .pure(let a):
             return HandCellStyle(
-                fill: ActionPalette.fill(for: a),
-                foreground: ActionPalette.foreground(for: a)
+                fill: palette.color(for: a),
+                foreground: palette.foreground(for: a)
             )
-        case .mixed:
-            return HandCellStyle(fill: ActionPalette.mixedFill, foreground: .white)
+        case .mixed(let aggressive, let passive):
+            let chartAction = ChartAction.mixed(aggressive: aggressive, passive: passive)
+            return HandCellStyle(
+                fill: palette.color(for: chartAction),
+                foreground: palette.foreground(for: chartAction)
+            )
         }
     }
 
@@ -147,8 +154,8 @@ struct ChartRecallView: View {
         let wrongYellow  = Color(red: 0.96, green: 0.80, blue: 0.20)
         let missedOrange = Color(red: 0.95, green: 0.62, blue: 0.10)
         let wrongRed     = Color(red: 0.92, green: 0.30, blue: 0.30)
-        let foldFill     = ActionPalette.fill(for: .fold)
-        let foldFg       = ActionPalette.foreground(for: .fold)
+        let foldFill     = palette.color(for: .fold)
+        let foldFg       = palette.foreground(for: .fold)
         let textOnYellow = Color.primary.opacity(0.85)
 
         switch result.grades[hand] {
@@ -259,8 +266,9 @@ struct ChartRecallView: View {
 
     private func paletteSwatchColor(for answer: RecallAnswer) -> Color {
         switch answer {
-        case .pure(let a): return ActionPalette.fill(for: a)
-        case .mixed:       return ActionPalette.mixedFill
+        case .pure(let a): return palette.color(for: a)
+        case .mixed(let aggressive, let passive):
+            return palette.color(for: .mixed(aggressive: aggressive, passive: passive))
         }
     }
 }

@@ -13,6 +13,9 @@ struct ChartDetailView: View {
     let chart: Chart
 
     @State private var isRevealed = false
+    @Environment(\.colorPaletteStore) private var paletteStore
+
+    private var palette: ColorPalette { paletteStore.palette }
 
     var body: some View {
         ScrollView {
@@ -79,8 +82,8 @@ struct ChartDetailView: View {
             if isRevealed {
                 let action = chart.entries[hand] ?? .pure(.fold)
                 return HandCellStyle(
-                    fill: ActionPalette.fill(for: action),
-                    foreground: ActionPalette.foreground(for: action)
+                    fill: palette.color(for: action),
+                    foreground: palette.foreground(for: action)
                 )
             } else {
                 return HandCellStyle(
@@ -108,8 +111,8 @@ struct ChartDetailView: View {
         case .firstToAct:
             let open = chart.fractionOfCombos(containing: .open)
             return [
-                LegendItem(color: ActionPalette.fill(for: .open), label: "Open", fraction: open),
-                LegendItem(color: ActionPalette.fill(for: .fold), label: "Fold", fraction: 1 - open),
+                LegendItem(color: palette.color(for: .open), label: "Open", fraction: open),
+                LegendItem(color: palette.color(for: .fold), label: "Fold", fraction: 1 - open),
             ]
         case .facingOpen:
             // Split the chart's entries into four buckets by ChartAction kind.
@@ -149,21 +152,21 @@ struct ChartDetailView: View {
             }
 
             var items: [LegendItem] = [
-                LegendItem(color: ActionPalette.fill(for: .threeBet), label: "3-Bet", fraction: pureFrac),
+                LegendItem(color: palette.color(for: .threeBet), label: "3-Bet", fraction: pureFrac),
             ]
             if mixFrac > 0 {
                 // Mixed cells render blue on the grid, regardless of the
                 // passive leg. Legend uses the same blue.
-                items.append(LegendItem(color: ActionPalette.mixedFill,
+                items.append(LegendItem(color: palette.threeBetCall,
                                         label: mixLabel,
                                         fraction: mixFrac))
             }
             if callFrac > 0 {
-                items.append(LegendItem(color: ActionPalette.fill(for: .call),
+                items.append(LegendItem(color: palette.color(for: .call),
                                         label: "Call",
                                         fraction: callFrac))
             }
-            items.append(LegendItem(color: ActionPalette.fill(for: .fold),
+            items.append(LegendItem(color: palette.color(for: .fold),
                                     label: "Fold",
                                     fraction: foldFrac))
             return items
@@ -193,19 +196,19 @@ struct ChartDetailView: View {
             let foldFrac = max(0, 1 - pureFrac - mixFrac - callFrac)
 
             var items: [LegendItem] = [
-                LegendItem(color: ActionPalette.fill(for: .fourBet), label: "4-Bet", fraction: pureFrac),
+                LegendItem(color: palette.color(for: .fourBet), label: "4-Bet", fraction: pureFrac),
             ]
             if mixFrac > 0 {
-                items.append(LegendItem(color: ActionPalette.mixedFill,
+                items.append(LegendItem(color: palette.fourBetCall,
                                         label: "4-Bet/Call",
                                         fraction: mixFrac))
             }
             if callFrac > 0 {
-                items.append(LegendItem(color: ActionPalette.fill(for: .call),
+                items.append(LegendItem(color: palette.color(for: .call),
                                         label: "Call",
                                         fraction: callFrac))
             }
-            items.append(LegendItem(color: ActionPalette.fill(for: .fold),
+            items.append(LegendItem(color: palette.color(for: .fold),
                                     label: "Fold",
                                     fraction: foldFrac))
             return items
@@ -234,19 +237,19 @@ struct ChartDetailView: View {
             let foldFrac = max(0, 1 - pureFrac - mixFrac - callFrac)
 
             var items: [LegendItem] = [
-                LegendItem(color: ActionPalette.fill(for: .fiveBet), label: "All-In", fraction: pureFrac),
+                LegendItem(color: palette.color(for: .fiveBet), label: "All-In", fraction: pureFrac),
             ]
             if mixFrac > 0 {
-                items.append(LegendItem(color: ActionPalette.mixedFill,
+                items.append(LegendItem(color: palette.fiveBetCall,
                                         label: "All-In/Call",
                                         fraction: mixFrac))
             }
             if callFrac > 0 {
-                items.append(LegendItem(color: ActionPalette.fill(for: .call),
+                items.append(LegendItem(color: palette.color(for: .call),
                                         label: "Call",
                                         fraction: callFrac))
             }
-            items.append(LegendItem(color: ActionPalette.fill(for: .fold),
+            items.append(LegendItem(color: palette.color(for: .fold),
                                     label: "Fold",
                                     fraction: foldFrac))
             return items

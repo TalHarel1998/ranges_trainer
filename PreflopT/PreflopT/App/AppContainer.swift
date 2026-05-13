@@ -12,9 +12,14 @@ import SwiftUI
 @MainActor
 final class AppContainer {
     let chartRepository: ChartRepository
+    let colorPaletteStore: ColorPaletteStore
 
-    init(chartRepository: ChartRepository) {
+    init(
+        chartRepository: ChartRepository,
+        colorPaletteStore: ColorPaletteStore = ColorPaletteStore()
+    ) {
         self.chartRepository = chartRepository
+        self.colorPaletteStore = colorPaletteStore
     }
 
     /// The real container used in production: loads bundled chart JSON.
@@ -40,6 +45,20 @@ extension EnvironmentValues {
     var chartRepository: ChartRepository {
         get { self[ChartRepositoryKey.self] }
         set { self[ChartRepositoryKey.self] = newValue }
+    }
+}
+
+private struct ColorPaletteStoreKey: EnvironmentKey {
+    /// Default store used by previews; not persisted to real UserDefaults.
+    static let defaultValue: ColorPaletteStore = ColorPaletteStore(
+        defaults: UserDefaults(suiteName: "PreflopTPreviewDefaults") ?? .standard
+    )
+}
+
+extension EnvironmentValues {
+    var colorPaletteStore: ColorPaletteStore {
+        get { self[ColorPaletteStoreKey.self] }
+        set { self[ColorPaletteStoreKey.self] = newValue }
     }
 }
 

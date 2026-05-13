@@ -143,6 +143,14 @@ struct ChartBrowserView: View {
                         }
                     }
                 }
+
+                Section {
+                    NavigationLink {
+                        EditColorsView()
+                    } label: {
+                        Label("Edit Colors", systemImage: "paintpalette")
+                    }
+                }
             }
             .navigationTitle("GG 6-Max Cash Ranges")
             .navigationDestination(for: ChartCategory.self) { category in
@@ -253,6 +261,8 @@ private struct RFIChartRow: View {
 
 private struct DefenseChartRow: View {
     let chart: Chart
+    @Environment(\.colorPaletteStore) private var paletteStore
+    private var palette: ColorPalette { paletteStore.palette }
 
     var body: some View {
         HStack {
@@ -272,11 +282,11 @@ private struct DefenseChartRow: View {
                 }
                 if mixedCombos > 0 {
                     Text("\(mixedCombos) mix")
-                        .foregroundStyle(ActionPalette.mixedFill)
+                        .foregroundStyle(palette.threeBetCall)
                 }
                 if callCombos > 0 {
                     Text("\(callCombos) call")
-                        .foregroundStyle(ActionPalette.fill(for: .call))
+                        .foregroundStyle(palette.call)
                 }
             }
             .font(.caption)
@@ -319,6 +329,8 @@ private struct DefenseChartRow: View {
 
 private struct ThreeBetChartRow: View {
     let chart: Chart
+    @Environment(\.colorPaletteStore) private var paletteStore
+    private var palette: ColorPalette { paletteStore.palette }
 
     var body: some View {
         HStack {
@@ -334,15 +346,15 @@ private struct ThreeBetChartRow: View {
             VStack(alignment: .trailing, spacing: 2) {
                 if fourBetCombos > 0 {
                     Text("\(fourBetCombos) 4-bet")
-                        .foregroundStyle(ActionPalette.fill(for: .fourBet))
+                        .foregroundStyle(palette.fourBet)
                 }
                 if mixedCombos > 0 {
                     Text("\(mixedCombos) mix")
-                        .foregroundStyle(ActionPalette.mixedFill)
+                        .foregroundStyle(palette.fourBetCall)
                 }
                 if callCombos > 0 {
                     Text("\(callCombos) call")
-                        .foregroundStyle(ActionPalette.fill(for: .call))
+                        .foregroundStyle(palette.call)
                 }
             }
             .font(.caption)
@@ -378,6 +390,8 @@ private struct ThreeBetChartRow: View {
 
 private struct FourBetChartRow: View {
     let chart: Chart
+    @Environment(\.colorPaletteStore) private var paletteStore
+    private var palette: ColorPalette { paletteStore.palette }
 
     var body: some View {
         HStack {
@@ -393,15 +407,15 @@ private struct FourBetChartRow: View {
             VStack(alignment: .trailing, spacing: 2) {
                 if fiveBetCombos > 0 {
                     Text("\(fiveBetCombos) all-in")
-                        .foregroundStyle(ActionPalette.fill(for: .fiveBet))
+                        .foregroundStyle(palette.fiveBet)
                 }
                 if mixedCombos > 0 {
                     Text("\(mixedCombos) mix")
-                        .foregroundStyle(ActionPalette.mixedFill)
+                        .foregroundStyle(palette.fiveBetCall)
                 }
                 if callCombos > 0 {
                     Text("\(callCombos) call")
-                        .foregroundStyle(ActionPalette.fill(for: .call))
+                        .foregroundStyle(palette.call)
                 }
             }
             .font(.caption)

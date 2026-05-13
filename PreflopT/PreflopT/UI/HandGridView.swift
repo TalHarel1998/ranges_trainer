@@ -24,54 +24,25 @@ enum HandCellOverlay: Equatable {
     case missed       // small dot showing the correct action color
 }
 
-/// Color palette for chart actions. Kept in one place so the painter,
-/// read-only viewer, and diff view stay visually consistent.
+/// Color palette for chart actions. Kept for compatibility: all color
+/// lookups now go through `ColorPalette` (injected via `@Environment`).
+/// These wrappers let views call the familiar `ActionPalette.fill(…)` shape
+/// while sourcing values from the live store.
 enum ActionPalette {
-    static func fill(for action: Action) -> Color {
-        switch action {
-        case .fold:     return Color(.systemGray5)
-        case .call:     return Color(red: 0.22, green: 0.70, blue: 0.35)   // green
-        // All "aggressive" pure actions share red. Within any single chart
-        // only one of these appears (RFI uses .open, defense uses .threeBet,
-        // vs-3-bet uses .fourBet, vs-4-bet uses .fiveBet), so there's no
-        // ambiguity. The shared color expresses "take the most aggressive
-        // line available for this spot".
-        case .open:     return Color(red: 0.92, green: 0.30, blue: 0.30)   // red
-        case .threeBet: return Color(red: 0.92, green: 0.30, blue: 0.30)   // red
-        case .fourBet:  return Color(red: 0.92, green: 0.30, blue: 0.30)   // red
-        case .fiveBet:  return Color(red: 0.92, green: 0.30, blue: 0.30)   // red
-        }
+    static func fill(for action: Action, palette: ColorPalette) -> Color {
+        palette.color(for: action)
     }
 
-    /// Color used for mixed-action chart cells. Yellow — distinct from pure
-    /// call (green) and pure aggressive (red).
-    static var mixedFill: Color {
-        Color(red: 0.96, green: 0.80, blue: 0.20)   // yellow
+    static func fill(for chartAction: ChartAction, palette: ColorPalette) -> Color {
+        palette.color(for: chartAction)
     }
 
-    static func fill(for chartAction: ChartAction) -> Color {
-        switch chartAction {
-        case .pure(let a):
-            return fill(for: a)
-        case .mixed:
-            return mixedFill
-        }
+    static func foreground(for chartAction: ChartAction, palette: ColorPalette) -> Color {
+        palette.foreground(for: chartAction)
     }
 
-    /// Foreground (text) color that stays legible on top of `fill(for:)`.
-    static func foreground(for chartAction: ChartAction) -> Color {
-        switch chartAction {
-        case .pure(.fold): return .primary.opacity(0.8)
-        case .mixed:       return .primary.opacity(0.85)   // dark text on yellow
-        case .pure:        return .white                   // white on green or red
-        }
-    }
-
-    static func foreground(for action: Action) -> Color {
-        switch action {
-        case .fold: return .primary.opacity(0.8)
-        default:    return .white                          // white on green or red
-        }
+    static func foreground(for action: Action, palette: ColorPalette) -> Color {
+        palette.foreground(for: action)
     }
 }
 
@@ -198,12 +169,12 @@ struct HandGridView: View {
 extension HandGridView {
     /// Read-only rendering of a chart's entries. Unspecified cells render as
     /// fold. No interaction.
-    static func readOnly(entries: [HandClass: ChartAction]) -> HandGridView {
+    static func readOnly(entries: [HandClass: ChartAction], palette: ColorPalette) -> HandGridView {
         HandGridView { hand in
             let action = entries[hand] ?? .pure(.fold)
             return HandCellStyle(
-                fill: ActionPalette.fill(for: action),
-                foreground: ActionPalette.foreground(for: action)
+                fill: palette.color(for: action),
+                foreground: palette.foreground(for: action)
             )
         }
     }
@@ -215,6 +186,6 @@ extension HandGridView {
             .compactMap(HandClass.init)
             .map { ($0, .pure(.open)) }
     )
-    return HandGridView.readOnly(entries: entries)
+    return HandGridView.readOnly(entries: entries, palette: .default)
         .padding()
 }
