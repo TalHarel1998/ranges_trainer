@@ -21,6 +21,7 @@ enum ChartCategory: String, CaseIterable, Hashable, Identifiable {
     case utgVs3bet
     case coVs3bet
     case btnVs3bet
+    case sbVs3bet
 
     var id: String { rawValue }
 
@@ -33,6 +34,7 @@ enum ChartCategory: String, CaseIterable, Hashable, Identifiable {
         case .utgVs3bet:  return "UTG vs 3-Bet"
         case .coVs3bet:   return "CO vs 3-Bet"
         case .btnVs3bet:  return "BTN vs 3-Bet"
+        case .sbVs3bet:   return "SB vs 3-Bet"
         }
     }
 
@@ -64,6 +66,9 @@ enum ChartCategory: String, CaseIterable, Hashable, Identifiable {
 
         case .btnVs3bet:
             return vs3betCharts(from: all, hero: .btn)
+
+        case .sbVs3bet:
+            return vs3betCharts(from: all, hero: .sb)
         }
     }
 
@@ -181,7 +186,7 @@ private struct CategoryChartListView: View {
             RFIChartRow(chart: chart)
         case .btnDefense, .sbDefense, .bbDefense:
             DefenseChartRow(chart: chart)
-        case .utgVs3bet, .coVs3bet, .btnVs3bet:
+        case .utgVs3bet, .coVs3bet, .btnVs3bet, .sbVs3bet:
             ThreeBetChartRow(chart: chart)
         }
     }
