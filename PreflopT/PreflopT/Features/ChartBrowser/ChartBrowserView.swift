@@ -278,7 +278,7 @@ private struct DefenseChartRow: View {
             VStack(alignment: .trailing, spacing: 2) {
                 if threeBetCombos > 0 {
                     Text("\(threeBetCombos) 3-bet")
-                        .foregroundStyle(.red)
+                        .foregroundStyle(palette.threeBet)
                 }
                 if mixedCombos > 0 {
                     Text("\(mixedCombos) mix")
