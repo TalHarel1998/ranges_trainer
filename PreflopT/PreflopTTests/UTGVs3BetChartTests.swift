@@ -35,8 +35,8 @@ struct UTGVs3BetTests {
             return false
         }.count
         let calls  = c.entries.values.filter { if case .pure(.call) = $0 { return true } else { return false } }.count
-        #expect(pure4b == 3)
-        #expect(mix == 8)
+        #expect(pure4b == 4)
+        #expect(mix == 7)
         #expect(calls == 4)
         #expect(pure4b + mix + calls == 15)
     }
@@ -46,14 +46,14 @@ struct UTGVs3BetTests {
         let c = try #require(
             repo.chart(for: Scenario(hero: .utg, priorAction: .facingThreeBet(from: .ip)))
         )
-        // Pure 4-bet
+        // Pure 4-bet (AKs is pure, alongside AA/KK/AKo)
         #expect(c.action(for: HandClass("AA")!)  == .pure(.fourBet))
         #expect(c.action(for: HandClass("KK")!)  == .pure(.fourBet))
+        #expect(c.action(for: HandClass("AKs")!) == .pure(.fourBet))
         #expect(c.action(for: HandClass("AKo")!) == .pure(.fourBet))
-        // Mixed 4-bet / call (note: mixed-row AKo treated as typo for AKs)
+        // Mixed 4-bet / call
         #expect(c.action(for: HandClass("QQ")!)  == .mixed(aggressive: .fourBet, passive: .call))
         #expect(c.action(for: HandClass("JJ")!)  == .mixed(aggressive: .fourBet, passive: .call))
-        #expect(c.action(for: HandClass("AKs")!) == .mixed(aggressive: .fourBet, passive: .call))
         #expect(c.action(for: HandClass("AJs")!) == .mixed(aggressive: .fourBet, passive: .call))
         #expect(c.action(for: HandClass("KQs")!) == .mixed(aggressive: .fourBet, passive: .call))
         #expect(c.action(for: HandClass("KJs")!) == .mixed(aggressive: .fourBet, passive: .call))
@@ -66,7 +66,6 @@ struct UTGVs3BetTests {
         #expect(c.action(for: HandClass("ATs")!) == .pure(.call))
         // Folds
         #expect(c.action(for: HandClass("88")!)  == .pure(.fold))
-        #expect(c.action(for: HandClass("AKo")!) == .pure(.fourBet)) // sanity: AKo is value 4-bet
         #expect(c.action(for: HandClass("AQo")!) == .pure(.fold))
         #expect(c.action(for: HandClass("72o")!) == .pure(.fold))
     }
