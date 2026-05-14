@@ -38,7 +38,7 @@ final class ChartEditorViewModel {
         self.scenario = scenario
         self.baseChart = baseChart
         self.overrideStore = overrideStore
-        self.palette = Self.editorPalette(for: scenario.priorAction)
+        self.palette = Self.editorPalette(for: baseChart)
 
         // Seed from existing saved overrides.
         let saved = overrideStore.overrides(for: scenario.key)
@@ -56,10 +56,22 @@ final class ChartEditorViewModel {
         let label: String
     }
 
-    /// All actions paintable for this chart type. The editor exposes more
-    /// options than `Chart Recall`'s palette — including Fold, so the user
-    /// can change a cell to fold even if the base chart has none.
-    static func editorPalette(for priorAction: PriorAction) -> [PaletteOption] {
+    /// Palette options for the given chart: full chart-type set, filtered
+    /// down to actions that actually appear in the bundled chart. Fold is
+    /// always included (every chart has implicit folds, and the user must
+    /// be able to revert a cell to fold).
+    static func editorPalette(for chart: Chart) -> [PaletteOption] {
+        let all = baseEditorPalette(for: chart.scenario.priorAction)
+        let usedActions = Set(chart.entries.values)
+        return all.filter { option in
+            if option.action == .pure(.fold) { return true }
+            return usedActions.contains(option.action)
+        }
+    }
+
+    /// Full set of palette options for a chart type, before filtering by
+    /// chart content. Used internally and exposed for tests.
+    static func baseEditorPalette(for priorAction: PriorAction) -> [PaletteOption] {
         switch priorAction {
         case .firstToAct:
             return [
@@ -116,6 +128,19 @@ final class ChartEditorViewModel {
 
     /// Whether anything has actually changed relative to bundled defaults.
     var hasModifications: Bool { modifiedCount > 0 }
+
+    /// Whether saving now would change what's persisted on disk. True when
+    /// the current pending state (post-filter for !=base) differs from
+    /// `overrideStore.overrides(for:)`. Used to enable the Save button so
+    /// users can also "save" by removing overrides (e.g. painting a cell
+    /// back to its bundled value when there was a saved override for it).
+    var hasUnsavedChanges: Bool {
+        var pendingOv = ChartOverrides()
+        for (hand, action) in pending where action != baseChart.action(for: hand) {
+            pendingOv.setAction(action, for: hand)
+        }
+        return pendingOv != overrideStore.overrides(for: scenario.key)
+    }
 
     // MARK: - Painting
 

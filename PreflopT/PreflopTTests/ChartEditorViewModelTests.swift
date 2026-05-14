@@ -142,19 +142,99 @@ struct ChartEditorViewModelTests {
         #expect(secondVM.effectiveAction(for: HandClass("AA")!) == .pure(.call))
     }
 
-    @Test func paletteVariesByPriorAction() {
-        let rfi = ChartEditorViewModel.editorPalette(for: .firstToAct)
+    @Test func paletteFiltersByChartContent() {
+        // Defense chart with only 3-Bet (pure) and 3-Bet/Call (mixed) — no
+        // 3-Bet/Fold, no pure call. Editor palette should reflect that, plus
+        // always-include Fold.
+        let scenario = Scenario(hero: .sb, priorAction: .facingOpen(from: .btn))
+        let entries: [HandClass: ChartAction] = [
+            HandClass("AA")!: .pure(.threeBet),
+            HandClass("KK")!: .mixed(aggressive: .threeBet, passive: .call),
+        ]
+        let chart = Chart(scenario: scenario, entries: entries)
+        let palette = ChartEditorViewModel.editorPalette(for: chart)
+        let labels = palette.map(\.label)
+        #expect(labels.contains("3-Bet"))
+        #expect(labels.contains("3-Bet/Call"))
+        #expect(labels.contains("Fold"))
+        #expect(!labels.contains("3-Bet/Fold"))
+        #expect(!labels.contains("Call"))
+    }
+
+    @Test func basePaletteHasFullChartTypeSet() {
+        // baseEditorPalette is unfiltered: useful for tests / debug.
+        let rfi = ChartEditorViewModel.baseEditorPalette(for: .firstToAct)
         #expect(rfi.map(\.label) == ["Open", "Fold"])
 
-        let defense = ChartEditorViewModel.editorPalette(for: .facingOpen(from: .utg))
-        #expect(defense.contains { $0.label == "3-Bet" })
-        #expect(defense.contains { $0.label == "Call" })
-        #expect(defense.contains { $0.label == "Fold" })
+        let defense = ChartEditorViewModel.baseEditorPalette(for: .facingOpen(from: .utg))
+        #expect(defense.map(\.label) == ["3-Bet", "3-Bet/Call", "3-Bet/Fold", "Call", "Fold"])
 
-        let vs3b = ChartEditorViewModel.editorPalette(for: .facingThreeBet(from: .ip))
+        let vs3b = ChartEditorViewModel.baseEditorPalette(for: .facingThreeBet(from: .ip))
         #expect(vs3b.map(\.label) == ["4-Bet", "4-Bet/Call", "Call", "Fold"])
 
-        let vs4b = ChartEditorViewModel.editorPalette(for: .facingFourBet(from: .co))
+        let vs4b = ChartEditorViewModel.baseEditorPalette(for: .facingFourBet(from: .co))
         #expect(vs4b.map(\.label) == ["All-In", "All-In/Call", "Call", "Fold"])
+    }
+
+    // MARK: - Save-button state (Bug 1 regression)
+
+    @Test func saveButtonEnabledWhenPendingDiffersFromSaved() {
+        let dir = Self.tempDir()
+        let store = ChartOverrideStore(directory: dir)
+        let chart = makeBaseChart()
+        let vm = ChartEditorViewModel(
+            scenario: chart.scenario,
+            baseChart: chart,
+            overrideStore: store
+        )
+        // Start: nothing saved, no pending. Save disabled.
+        #expect(vm.hasUnsavedChanges == false)
+
+        // Paint a new edit. Save enabled.
+        vm.selectedIndex = vm.palette.firstIndex { $0.label == "Call" }!
+        vm.paint(HandClass("AA")!)
+        #expect(vm.hasUnsavedChanges == true)
+
+        // Save it. Now pending matches saved. Save disabled.
+        vm.save()
+        #expect(vm.hasUnsavedChanges == false)
+    }
+
+    @Test func paintingBackToBaseAfterSaveStillEnablesSave() {
+        // The original Bug 1: if a previously-saved cell is repainted to its
+        // bundled value, the override should be removable. With the old
+        // hasModifications check, the Save button was disabled.
+        let dir = Self.tempDir()
+        let store = ChartOverrideStore(directory: dir)
+
+        // Start with an entry that's bundled-fold (72o is not in the chart).
+        let scenario = Scenario(hero: .utg, priorAction: .facingThreeBet(from: .ip))
+        let entries: [HandClass: ChartAction] = [
+            HandClass("AA")!: .pure(.fourBet),
+        ]
+        let chart = Chart(scenario: scenario, entries: entries)
+
+        // Save an override that turns 72o into 4-Bet.
+        var preExisting = ChartOverrides()
+        preExisting.setAction(.pure(.fourBet), for: HandClass("72o")!)
+        store.save(preExisting, for: scenario.key)
+
+        // Open editor: pending pre-loaded with 72o = 4-Bet.
+        let vm = ChartEditorViewModel(
+            scenario: scenario, baseChart: chart, overrideStore: store
+        )
+        #expect(vm.modifiedCount == 1)
+        #expect(vm.hasUnsavedChanges == false)   // pending already matches saved
+
+        // Repaint 72o to fold (its bundled default).
+        vm.selectedIndex = vm.palette.firstIndex { $0.label == "Fold" }!
+        vm.paint(HandClass("72o")!)
+        #expect(vm.modifiedCount == 0)            // matches base again
+        #expect(vm.hasUnsavedChanges == true)    // but saved file still has the old override
+
+        // Save: clears the override on disk.
+        vm.save()
+        #expect(vm.hasUnsavedChanges == false)
+        #expect(store.overrides(for: scenario.key).isEmpty)
     }
 }

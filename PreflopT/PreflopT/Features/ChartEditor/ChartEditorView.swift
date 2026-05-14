@@ -178,7 +178,7 @@ struct ChartEditorView: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
-            .disabled(!viewModel.hasModifications)
+            .disabled(!viewModel.hasUnsavedChanges)
         }
     }
 
