@@ -11,16 +11,26 @@ import SwiftUI
 
 @MainActor
 final class AppContainer {
+    /// The chart repository views consume — applies any user overrides on
+    /// top of the bundled charts.
     let chartRepository: ChartRepository
+    /// Raw bundled charts, no overrides. Editor reads from this when it
+    /// needs the un-edited baseline (e.g. to mark which cells differ).
+    let bundledChartRepository: ChartRepository
+    let chartOverrideStore: ChartOverrideStore
     let colorPaletteStore: ColorPaletteStore
     let rfiColorPaletteStore: RFIColorPaletteStore
 
     init(
         chartRepository: ChartRepository,
+        bundledChartRepository: ChartRepository,
+        chartOverrideStore: ChartOverrideStore,
         colorPaletteStore: ColorPaletteStore,
         rfiColorPaletteStore: RFIColorPaletteStore
     ) {
         self.chartRepository = chartRepository
+        self.bundledChartRepository = bundledChartRepository
+        self.chartOverrideStore = chartOverrideStore
         self.colorPaletteStore = colorPaletteStore
         self.rfiColorPaletteStore = rfiColorPaletteStore
     }
@@ -29,11 +39,15 @@ final class AppContainer {
     /// Traps on init failure (shipped data is invalid = programmer error).
     static func live() -> AppContainer {
         do {
-            let repo = try BundledChartRepository()
-            // Construct stores here rather than as default args so their
-            // initializers run inside the @MainActor class isolation context.
+            let bundled = try BundledChartRepository()
+            let overrideStore = ChartOverrideStore()
+            let chartRepo = OverridingChartRepository(
+                base: bundled, overrideStore: overrideStore
+            )
             return AppContainer(
-                chartRepository: repo,
+                chartRepository: chartRepo,
+                bundledChartRepository: bundled,
+                chartOverrideStore: overrideStore,
                 colorPaletteStore: ColorPaletteStore(),
                 rfiColorPaletteStore: RFIColorPaletteStore()
             )
@@ -82,6 +96,22 @@ extension EnvironmentValues {
     var rfiColorPaletteStore: RFIColorPaletteStore {
         get { self[RFIColorPaletteStoreKey.self] }
         set { self[RFIColorPaletteStoreKey.self] = newValue }
+    }
+}
+
+private struct ChartOverrideStoreKey: EnvironmentKey {
+    /// Preview/test default uses a temp directory so it never persists
+    /// to real Documents.
+    static let defaultValue: ChartOverrideStore = ChartOverrideStore(
+        directory: FileManager.default.temporaryDirectory
+            .appendingPathComponent("PreflopTPreviewOverrides", isDirectory: true)
+    )
+}
+
+extension EnvironmentValues {
+    var chartOverrideStore: ChartOverrideStore {
+        get { self[ChartOverrideStoreKey.self] }
+        set { self[ChartOverrideStoreKey.self] = newValue }
     }
 }
 

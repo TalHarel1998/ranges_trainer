@@ -17,6 +17,7 @@ struct PreflopTApp: App {
                 .environment(\.chartRepository, container.chartRepository)
                 .environment(\.colorPaletteStore, container.colorPaletteStore)
                 .environment(\.rfiColorPaletteStore, container.rfiColorPaletteStore)
+                .environment(\.chartOverrideStore, container.chartOverrideStore)
         }
     }
 }
