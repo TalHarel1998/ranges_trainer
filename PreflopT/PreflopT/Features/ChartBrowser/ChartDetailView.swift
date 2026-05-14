@@ -14,6 +14,8 @@ struct ChartDetailView: View {
 
     @State private var isRevealed = false
     @Environment(\.colorPaletteStore) private var paletteStore
+    @Environment(\.chartOverrideStore) private var overrideStore
+    @Environment(\.bundledChartRepository) private var bundledRepository
 
     private var palette: ColorPalette { paletteStore.palette }
 
@@ -47,6 +49,28 @@ struct ChartDetailView: View {
                         .padding(.vertical, 6)
                 }
                 .buttonStyle(.borderedProminent)
+                .padding(.horizontal)
+
+                NavigationLink {
+                    if let bundled = bundledRepository.chart(for: chart.scenario) {
+                        ChartEditorView(
+                            scenario: chart.scenario,
+                            baseChart: bundled,
+                            overrideStore: overrideStore
+                        )
+                    } else {
+                        ContentUnavailableView(
+                            "Chart not editable",
+                            systemImage: "pencil.slash",
+                            description: Text("Could not resolve the base chart.")
+                        )
+                    }
+                } label: {
+                    Label("Edit", systemImage: "pencil")
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
+                }
+                .buttonStyle(.bordered)
                 .padding(.horizontal)
 
                 Spacer(minLength: 0)

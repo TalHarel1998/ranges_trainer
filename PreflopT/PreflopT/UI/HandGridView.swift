@@ -22,6 +22,7 @@ enum HandCellOverlay: Equatable {
     case correct      // green check
     case wrong        // red X
     case missed       // small dot showing the correct action color
+    case edited       // small accent dot in the top-leading corner
 }
 
 /// Color palette for chart actions. Kept for compatibility: all color
@@ -126,6 +127,12 @@ struct HandGridView: View {
                 .fill(Color.white)
                 .frame(width: size * 0.22, height: size * 0.22)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                .padding(3)
+        case .edited:
+            Circle()
+                .fill(Color.accentColor)
+                .frame(width: size * 0.18, height: size * 0.18)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .padding(3)
         }
     }

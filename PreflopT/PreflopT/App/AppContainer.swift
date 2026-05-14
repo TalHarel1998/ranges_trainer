@@ -71,6 +71,20 @@ extension EnvironmentValues {
     }
 }
 
+private struct BundledChartRepositoryKey: EnvironmentKey {
+    /// Default for previews that don't inject; falls back to empty.
+    static let defaultValue: ChartRepository = EmptyChartRepository()
+}
+
+extension EnvironmentValues {
+    /// The raw bundled charts, no overrides. Used by the chart editor to
+    /// detect which cells differ from the un-edited base.
+    var bundledChartRepository: ChartRepository {
+        get { self[BundledChartRepositoryKey.self] }
+        set { self[BundledChartRepositoryKey.self] = newValue }
+    }
+}
+
 private struct ColorPaletteStoreKey: EnvironmentKey {
     /// Default store used by previews; not persisted to real UserDefaults.
     static let defaultValue: ColorPaletteStore = ColorPaletteStore(

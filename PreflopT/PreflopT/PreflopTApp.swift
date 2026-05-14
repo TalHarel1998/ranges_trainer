@@ -15,6 +15,7 @@ struct PreflopTApp: App {
         WindowGroup {
             ContentView()
                 .environment(\.chartRepository, container.chartRepository)
+                .environment(\.bundledChartRepository, container.bundledChartRepository)
                 .environment(\.colorPaletteStore, container.colorPaletteStore)
                 .environment(\.rfiColorPaletteStore, container.rfiColorPaletteStore)
                 .environment(\.chartOverrideStore, container.chartOverrideStore)
