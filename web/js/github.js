@@ -157,3 +157,38 @@ export async function putFile(token, repoPath, {
   if (res.status === 404) throw new GitHubError(`File not found (404): ${bodyMsg}`, { status: 404, kind: 'notFound' });
   throw new GitHubError(`GitHub returned HTTP ${res.status}: ${bodyMsg}`, { status: res.status, kind: 'other' });
 }
+
+// A sha that can never match a real file version.
+const PROBE_SHA = '0000000000000000000000000000000000000000';
+
+// Checks that the token itself can write file contents. GET /repos reports
+// `permissions.push` for the token's *owner*, so a fine-grained token without
+// "Contents: Read and write" passes it and then fails on save. Here we read
+// `probePath`, then PUT the same content back with a sha that can't match:
+// GitHub checks authorization first, so a write-capable token gets 409
+// (version mismatch, nothing written) and a read-only token gets 403/404.
+// The content sent is the file's current content, so even an unexpected
+// success leaves the file unchanged. Resolves { ok: true } or throws
+// GitHubError with kind 'noWrite' | 'unauthorized' | 'network' | 'other'.
+export async function testWriteAccess(token, probePath, { fetchImpl = globalThis.fetch } = {}) {
+  const { text } = await getFile(token, probePath, { fetchImpl });
+  try {
+    await putFile(token, probePath, {
+      message: 'Write-access check (rejected by design, changes nothing)',
+      text,
+      sha: PROBE_SHA,
+    }, { fetchImpl });
+    return { ok: true };
+  } catch (err) {
+    if (!(err instanceof GitHubError)) throw err;
+    if (err.kind === 'conflict') return { ok: true };
+    if (err.kind === 'forbidden' || err.kind === 'notFound') {
+      throw new GitHubError(
+        `Token can read but not write ranges_trainer (${err.status}). ` +
+        'Give it Repository permissions → Contents: Read and write.',
+        { status: err.status, kind: 'noWrite' },
+      );
+    }
+    throw err;
+  }
+}

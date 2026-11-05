@@ -131,7 +131,21 @@ Charts and colors can be edited in the web app and saved straight to GitHub.
    - Permissions: Repository → **Contents: Read and write**. Leave everything else as No access.
    - Expiration: your choice. When it expires, generate a new one and paste it again.
 2. In the app: Home → **GitHub** → paste the token → **Save & test**. It must say
-   "Connected — can write to ranges_trainer".
+   "Connected — can write to ranges_trainer". Save & test runs two checks. The
+   first reads the repo. The second is a write probe: it sends `palette.json`
+   back unchanged with a version id (`sha`) that can never match. GitHub rejects
+   it with 409, so nothing is written, but that 409 shows the token can write.
+
+**Troubleshooting "Token can't write" / 403:**
+- `GET /repos` reports the **account's** permissions (owner, so push = true), not
+  the token's. So a token with read-only Contents used to pass the old check and
+  then fail on Save. The write probe now catches this.
+- Fix: github.com → Settings → Developer settings → Fine-grained tokens → open the
+  token → **Edit** → Repository permissions → **Contents: Read and write** →
+  Save. Also check that Repository access includes `ranges_trainer`. The same token
+  string keeps working after the edit, so there's no need to paste it again.
+- 401 means the token is expired, revoked or mistyped. Generate a new one and
+  paste it.
 
 **Editing a chart:**
 1. Open the chart and tap **Edit**. The button only appears once a token is

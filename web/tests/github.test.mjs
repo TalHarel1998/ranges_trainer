@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { testConnection, getFile, putFile, GitHubError } from '../js/github.js';
+import { testConnection, testWriteAccess, getFile, putFile, GitHubError } from '../js/github.js';
 import { utf8ToBase64 } from '../js/serialize.js';
 
 const TOKEN = 'github_pat_FAKE_111122223333';
@@ -222,4 +222,61 @@ test('putFile: token never leaks into error messages', async () => {
       assert.ok(!String(err.message).includes(TOKEN));
     }
   }
+});
+
+// ---------------------- testWriteAccess ----------------------
+// GET /repos reports the account's permissions, so a fine-grained token with
+// read-only Contents passes testConnection. testWriteAccess catches that by
+// PUTting the unchanged file with a sha that can't match.
+
+const PROBE_PATH = 'web/palette.json';
+const PROBE_TEXT = '{\n  "actions": {}\n}\n';
+
+function probeResponder(putStatus, putBody = { message: 'x' }) {
+  return (url, init) => {
+    if (init.method === 'GET') {
+      return makeResponse({ status: 200, body: { sha: 'realsha', encoding: 'base64', content: utf8ToBase64(PROBE_TEXT) } });
+    }
+    return makeResponse({ status: putStatus, body: putBody });
+  };
+}
+
+test('testWriteAccess: 409 on wrong sha → write access confirmed', async () => {
+  const { calls, fetchImpl } = recorder(probeResponder(409, { message: 'web/palette.json does not match 0000' }));
+  const result = await testWriteAccess(TOKEN, PROBE_PATH, { fetchImpl });
+  assert.equal(result.ok, true);
+  assert.equal(calls.length, 2);
+  const put = calls[1];
+  assert.equal(put.init.method, 'PUT');
+  const body = JSON.parse(put.init.body);
+  assert.equal(body.sha, '0000000000000000000000000000000000000000', 'probe sha never matches a real file');
+  assert.equal(Buffer.from(body.content, 'base64').toString('utf8'), PROBE_TEXT, 'probe sends the current content unchanged');
+  assert.equal(body.branch, 'main');
+});
+
+test('testWriteAccess: 403 (read-only token) → kind "noWrite" with fix instructions', async () => {
+  const { fetchImpl } = recorder(probeResponder(403, { message: 'Resource not accessible by personal access token' }));
+  await assert.rejects(testWriteAccess(TOKEN, PROBE_PATH, { fetchImpl }), (err) => {
+    assert.ok(err instanceof GitHubError);
+    assert.equal(err.kind, 'noWrite');
+    assert.equal(err.status, 403);
+    assert.match(err.message, /Contents: Read and write/);
+    assert.ok(!err.message.includes(TOKEN));
+    return true;
+  });
+});
+
+test('testWriteAccess: 404 on PUT (no repo write) → kind "noWrite"', async () => {
+  const { fetchImpl } = recorder(probeResponder(404));
+  await assert.rejects(testWriteAccess(TOKEN, PROBE_PATH, { fetchImpl }), (err) => err.kind === 'noWrite');
+});
+
+test('testWriteAccess: 401 → kind "unauthorized"', async () => {
+  const { fetchImpl } = recorder(probeResponder(401, { message: 'Bad credentials' }));
+  await assert.rejects(testWriteAccess(TOKEN, PROBE_PATH, { fetchImpl }), (err) => err.kind === 'unauthorized');
+});
+
+test('testWriteAccess: GET failure propagates (e.g. network)', async () => {
+  const fetchImpl = async () => { throw new TypeError('Failed to fetch'); };
+  await assert.rejects(testWriteAccess(TOKEN, PROBE_PATH, { fetchImpl }), (err) => err.kind === 'network');
 });

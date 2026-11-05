@@ -189,10 +189,16 @@ path `web/palette.json`.
   autocorrect / spellcheck. "Save & test" calls
   `GET https://api.github.com/repos/TalHarel1998/ranges_trainer` with
   `Authorization: Bearer <token>`, `Accept: application/vnd.github+json`,
-  `X-GitHub-Api-Version: 2022-11-28`. Success requires HTTP 200 and
-  `permissions.push === true`; then the token is stored in localStorage key
+  `X-GitHub-Api-Version: 2022-11-28`. That check requires HTTP 200 and
+  `permissions.push === true`, but GitHub reports the *account's* permissions
+  there, not the token's. So Save & test also runs a write probe:
+  GET `web/palette.json`, then PUT the identical content with sha
+  `0000000000000000000000000000000000000000`. 409/422 = the token can write
+  (nothing is written); 403/404 = read-only token → message telling the user to
+  set Repository permissions → Contents: Read and write. Only after both pass is
+  the token stored in localStorage key
   `preflopt.githubToken.v1` and the page shows "Connected — can write to
-  ranges_trainer". Failure (401/403/404/no push permission/network) shows a clear
+  ranges_trainer". Failure (401/403/404/no push permission/no write/network) shows a clear
   message and does NOT store the token.
 - AC10.3 "Remove token" deletes it from localStorage and hides all edit/save UI.
 - AC10.4 The token never appears in: the DOM after saving (input cleared, masked
@@ -230,8 +236,11 @@ path `web/palette.json`.
   to the chart view.
 - AC11.7 On 409 or 422 (sha mismatch): message "This chart changed on GitHub since
   you opened it. Reload the editor and re-apply your edit." Nothing overwritten;
-  edits stay on screen. On 401/403: "Token rejected — check it in GitHub settings"
-  with a link to `#/github`. On network error: "Couldn't reach GitHub", edits kept.
+  edits stay on screen. On 401: "Token rejected (expired, revoked or mistyped) —
+  check it in GitHub settings." On 403: "Token can’t write to ranges_trainer. On
+  GitHub, edit the token: Repository permissions → Contents: Read and write. Then
+  check it in GitHub settings." Both inline, with a link to `#/github`.
+  On network error: "Couldn't reach GitHub", edits kept.
   Save button shows a busy state and is not double-submittable.
 - AC11.8 Leaving the editor with unsaved changes (Back link or hash change) asks
   for confirmation (`confirm()`); declining keeps the user on the editor.

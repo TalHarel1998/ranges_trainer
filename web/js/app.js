@@ -30,7 +30,7 @@ import {
   clearOldPaletteKeys, reconcilePendingWrites,
 } from './store.js';
 import {
-  testConnection, getFile, putFile, GitHubError,
+  testConnection, testWriteAccess, getFile, putFile, GitHubError,
 } from './github.js';
 import { chartToFileJSON } from './serialize.js';
 
@@ -133,15 +133,24 @@ function toast(message, { kind = 'info', ttl = 4000 } = {}) {
 
 // ------------------- Inline error box (text nodes only) -------------------
 
-function tokenRejectedChildren() {
-  // Builds the children of a "Token rejected" inline message using text
-  // nodes and a single anchor. No innerHTML, no HTML parsing of remote
-  // text (AC15.2).
+function tokenRejectedChildren(lead = 'Token rejected — check it in ') {
+  // Builds the children of a token error message using text nodes and a
+  // single anchor. No innerHTML, no HTML parsing of remote text (AC15.2).
   return [
-    'Token rejected — check it in ',
+    lead,
     h('a', { href: '#/github' }, 'GitHub settings'),
     '.',
   ];
+}
+
+// 401 = GitHub doesn't accept the token at all (expired, revoked, mistyped).
+// 403/404 on a write = the token is valid but lacks "Contents: Read and write"
+// on this repo (a fine-grained token's own permissions, not the account's).
+function tokenErrorLead(kind) {
+  if (kind === 'forbidden' || kind === 'noWrite') {
+    return 'Token can’t write to ranges_trainer. On GitHub, edit the token: Repository permissions → Contents: Read and write. Then check it in ';
+  }
+  return 'Token rejected (expired, revoked or mistyped) — check it in ';
 }
 
 function setInlineError(container, children) {
@@ -989,11 +998,12 @@ function handleGitHubError(err, { context = 'other', inlineBox = null } = {}) {
     if (inlineBox) setInlineError(inlineBox, [msg]);
     return;
   }
-  if (kind === 'unauthorized' || kind === 'forbidden') {
+  if (kind === 'unauthorized' || kind === 'forbidden' || kind === 'noWrite') {
     // AC11.7: 401/403 must appear INLINE on the page (with a link to the
     // GitHub settings page) and not only as a toast.
-    toast('Token rejected — check it in GitHub settings', { kind: 'error', ttl: 7000 });
-    if (inlineBox) setInlineError(inlineBox, tokenRejectedChildren());
+    const lead = tokenErrorLead(kind);
+    toast(lead + 'GitHub settings.', { kind: 'error', ttl: 9000 });
+    if (inlineBox) setInlineError(inlineBox, tokenRejectedChildren(lead));
     return;
   }
   if (kind === 'network') {
@@ -1054,6 +1064,9 @@ function renderGitHubPage(root) {
     saveBtn.textContent = 'Testing…';
     try {
       await testConnection(token);
+      // GET /repos reports the account's permissions, not the token's, so
+      // also confirm the token itself can write (changes nothing).
+      await testWriteAccess(token, PALETTE_REPO_PATH);
       setToken(token);
       input.value = '';                          // AC10.4: clear from DOM
       toast('Connected — can write to ranges_trainer', { kind: 'success' });
@@ -1201,7 +1214,7 @@ async function renderEditor(root, scenario) {
     const body = [];
     if (isAuth) {
       // Inline, with a link to the GitHub settings page (text nodes only).
-      body.push(h('div', { class: 'error' }, tokenRejectedChildren()));
+      body.push(h('div', { class: 'error' }, tokenRejectedChildren(tokenErrorLead(err.kind))));
       body.push(h('div', { class: 'actions' }, [
         h('a', { class: 'btn btn-primary', href: '#/github' }, 'Open GitHub settings'),
       ]));
