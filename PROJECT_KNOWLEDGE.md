@@ -4,7 +4,7 @@ Read this first. It is the single place for how this repo works, current status,
 commands, and decisions. Keep it up to date when you change something that a future
 person or agent would need to know.
 
-Last updated: 2025-11 (web app added on branch `web-app`).
+Last updated: 2026-11-05 (web app deployed to GitHub Pages).
 
 ## 1. What this repo is
 
@@ -149,13 +149,18 @@ on the device, inside the home-screen app's own storage.
 Done:
 - iOS app: RFI, defense, vs 3-bet, vs 4-bet charts, browser, unified RFI view,
   Chart Recall, chart editor (overrides), color settings.
-- Web app (branch `web-app`): feature parity with the iOS app except the editor.
-  Spec F1–F9 in `web/SPEC.md` are all verified by the reviewer, using unit tests
-  plus headless-Chrome tests of touch painting, offline, update flow and
-  sub-path hosting.
+- Web app: feature parity with the iOS app except the editor. Spec F1–F9 in
+  `web/SPEC.md` are all verified by the reviewer, using unit tests plus
+  headless-Chrome tests of touch painting, offline, update flow and sub-path
+  hosting.
+- Deployed: merged to `main` (992e39a), GitHub Pages source = GitHub Actions,
+  live at https://talharel1998.github.io/ranges_trainer/
 
 Next / open:
-- Merge `web-app` → `main`, enable Pages, install on the iPhone.
+- Install on the iPhone (section 6).
+- Workflow actions target Node 20, which GitHub has deprecated and now forces
+  onto Node 24. It still works; bump the actions to newer major versions when
+  they're available.
 - Situation Drill mode (deal two cards, pick the action). Planned in `.kiro/plan.md`
   Phase 5, not built on either platform.
 - Stats / weak-spot tracking.
