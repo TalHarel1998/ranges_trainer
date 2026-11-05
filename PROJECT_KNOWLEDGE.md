@@ -256,11 +256,11 @@ Done:
   83 unit tests, about 19k serializer checks (including a port of the Swift
   parser), and 160 headless-Chrome checks against a mocked GitHub API covering
   token handling, the editor, conflicts, errors, CSP, offline mode and updates.
-- Deployed and installed on the owner's iPhone.
+- Deployed and installed on the owner's iPhone. The first real save from the phone
+  (`88beeba`, "Update colors from web app") confirmed the token flow and GitHub's
+  CORS handling end to end.
 
 Next / open:
-- First real edit from the phone with a real token. Only the mocked API has
-  been tested, so this also confirms GitHub's CORS behavior.
 - Workflow actions target Node 20, which GitHub has deprecated and now forces
   onto Node 24. It still works; bump the actions to newer major versions when
   they're available.
