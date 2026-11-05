@@ -3,6 +3,9 @@
 .AppleDouble
 .LSOverride
 Icon?
+# "Icon?" (macOS folder-icon files) also matches "icons" on case-insensitive
+# filesystems; keep the web app's icons tracked.
+!web/icons/
 ._*
 
 # Xcode - User settings & build
