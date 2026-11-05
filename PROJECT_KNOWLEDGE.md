@@ -101,7 +101,8 @@ put the full combo count of a mixed hand in the "mix" bucket.
   requests.
 - **Routing:** hash routes, so no server config is needed:
   `#/`, `#/rfi`, `#/category/<id>`, `#/chart/<scenarioKey>`,
-  `#/recall/<scenarioKey>`, `#/colors`, `#/rfi-colors`.
+  `#/recall/<scenarioKey>`, `#/colors`, `#/rfi-colors` (Back → Colors),
+  `#/rfi-colors/rfi` (opened from the RFI page; Back → RFI).
 - **Read-only charts.** There is no chart editor on the web, on purpose: the JSON
   in git is the only source of truth. Color preferences are saved per device in
   localStorage (`preflopt.palette.v1`, `preflopt.rfiPalette.v1`).

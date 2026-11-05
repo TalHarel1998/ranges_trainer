@@ -494,7 +494,7 @@ function renderUnifiedRFI(root) {
     ),
   ]);
 
-  const rfiColors = h('a', { class: 'btn', href: '#/rfi-colors' }, 'Edit RFI Colors');
+  const rfiColors = h('a', { class: 'btn', href: '#/rfi-colors/rfi' }, 'Edit RFI Colors');
 
   clear(root);
   root.appendChild(page('RFI', '#/', [
@@ -743,7 +743,10 @@ function sectionHeader(label) {
   return h('div', { class: 'section-header' }, label);
 }
 
-function renderRFIColorsPage(root) {
+// Reachable from the unified RFI page (`#/rfi-colors/rfi`) and from the
+// Colors page (`#/rfi-colors`); Back returns to whichever one opened it.
+function renderRFIColorsPage(root, from) {
+  const backHref = from === 'rfi' ? '#/rfi' : '#/colors';
   const rows = h('div', { class: 'form' }, [
     sectionHeader('RFI ring colors'),
     rfiColorRow('UTG',    'utg'),
@@ -757,14 +760,14 @@ function renderRFIColorsPage(root) {
         b.addEventListener('click', () => {
           state.rfiPalette = { ...DEFAULT_RFI_PALETTE };
           saveRFIPalette(state.rfiPalette);
-          renderRFIColorsPage(root);
+          renderRFIColorsPage(root, from);
         });
         return b;
       })(),
     ]),
   ]);
   clear(root);
-  root.appendChild(page('Edit RFI Colors', '#/colors', [rows]));
+  root.appendChild(page('Edit RFI Colors', backHref, [rows]));
 }
 
 // ------------------- Router -------------------
@@ -777,7 +780,7 @@ function parseHash() {
   switch (parts[0]) {
     case 'rfi':         return { name: 'rfi' };
     case 'colors':      return { name: 'colors' };
-    case 'rfi-colors':  return { name: 'rfiColors' };
+    case 'rfi-colors':  return { name: 'rfiColors', from: parts[1] };
     case 'category':    return { name: 'category', id: parts[1] };
     case 'chart':       return { name: 'chart', key: parts.slice(1).join('/') };
     case 'recall':      return { name: 'recall', key: parts.slice(1).join('/') };
@@ -796,7 +799,7 @@ function route(root) {
     case 'home':      renderHome(root); break;
     case 'rfi':       renderUnifiedRFI(root); break;
     case 'colors':    renderColorsPage(root); break;
-    case 'rfiColors': renderRFIColorsPage(root); break;
+    case 'rfiColors': renderRFIColorsPage(root, r.from); break;
     case 'category':  renderCategory(root, r.id); break;
     case 'chart': {
       const sc = parseScenarioKey(r.key || '');
