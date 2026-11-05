@@ -21,7 +21,11 @@ When this spec is silent, match the Swift behavior.
 - Tests: `node --test web/tests/*.test.mjs` using only `node:test` + `node:assert`.
 - Local dev server binds to loopback only:
   `python3 -m http.server 8000 --bind 127.0.0.1 --directory web`.
-- No chart editing feature. Charts change only by editing JSON in git.
+- Charts and colors are edited either in git (Mac) or in the app, which commits to
+  GitHub via the REST API (F10–F13). The repo on GitHub is the single source of
+  truth; nothing edited in the app lives only on the device (except the token).
+- The only external origin the app may contact is `https://api.github.com`, and only
+  when a token is configured.
 
 ## Domain model (port of Swift `Domain/`)
 
@@ -98,7 +102,7 @@ When this spec is silent, match the Swift behavior.
   `Mixed` if both kinds), Call (only if >0), Fold. vs 3-bet: 4-Bet, 4-Bet/Call (if >0),
   Call (if >0), Fold. vs 4-bet: All-In, All-In/Call (if >0), Call (if >0), Fold.
 - AC4.4 "Practice: Chart Recall" button opens F6 for this chart.
-- AC4.5 No Edit button anywhere in the app.
+- AC4.5 Edit button appears only when a GitHub token is configured (F10); see F11.
 - AC4.6 If the chart has `openSize` or `note`, it is shown as small text.
 
 ### F5 — Unified RFI
@@ -106,8 +110,9 @@ When this spec is silent, match the Swift behavior.
   (default UTG red, MP orange, CO yellow, BTN/SB green, fold gray).
 - AC5.2 Revealed by default; Show/Hide toggle.
 - AC5.3 Legend: UTG, MP, CO, BTN/SB with cumulative percent.
-- AC5.4 Links to each per-position RFI chart (UTG/MP/CO/BTN/SB) so Chart Recall
-  can be practiced for each position. (Web addition; iOS lacks this entry point.)
+- AC5.4 Row of position buttons (UTG/MP/CO/BTN/SB) linking to each per-position RFI
+  chart view (`#/chart/rfi.<pos>`), which has Practice (and Edit, F11). (Updated:
+  previously linked straight to recall.)
 
 ### F6 — Chart Recall
 - AC6.1 Prompt: RFI "Tap the hands you would open."; others
@@ -135,8 +140,10 @@ When this spec is silent, match the Swift behavior.
 - AC7.1 Edit colors for: call, open, 3-bet, 4-bet, all-in, 3-bet/call, 3-bet/fold,
   4-bet/call, all-in/call; and RFI rings UTG, MP, CO, BTN/SB.
   Defaults match Swift `ColorPalette.default` / `RFIColorPalette.default`.
-- AC7.2 Changes apply immediately everywhere and persist across reloads
-  (localStorage). "Reset to defaults" restores them.
+- AC7.2 (Superseded by F12.) Colors come from `web/palette.json` in the repo, not
+  localStorage. Picker changes preview immediately everywhere; they persist only
+  when saved to GitHub (F12). "Reset to defaults" sets the built-in defaults as the
+  unsaved preview.
 - AC7.3 Cell text color auto-contrasts (BT.601 luminance > 0.6 → dark text, else white).
 
 ### F8 — Installable app (PWA)
@@ -164,4 +171,119 @@ When this spec is silent, match the Swift behavior.
 
 ## Out of scope
 
-Chart editing, Situation Drill, stats/progress tracking, sync between devices.
+Situation Drill, stats/progress tracking, multi-user accounts, editing from the iOS
+app to GitHub, OAuth login (token is pasted manually).
+
+## Editing via GitHub (F10–F14)
+
+Repo constants live in one module (`web/js/config.js`): owner `TalHarel1998`, repo
+`ranges_trainer`, branch `main`, chart repo dir
+`PreflopT/PreflopT/Resources/Charts/` (maps from app path `charts/<x>`), palette
+path `web/palette.json`.
+
+### F10 — GitHub connection (Settings)
+- AC10.1 Home has a "GitHub" row → `#/github`. The page explains in one sentence
+  what the token does, and how to create one: fine-grained token, only repo
+  `ranges_trainer`, Repository permission Contents: Read and write, nothing else.
+- AC10.2 Token input is `type=password`, `autocomplete=off`, no autocapitalize /
+  autocorrect / spellcheck. "Save & test" calls
+  `GET https://api.github.com/repos/TalHarel1998/ranges_trainer` with
+  `Authorization: Bearer <token>`, `Accept: application/vnd.github+json`,
+  `X-GitHub-Api-Version: 2022-11-28`. Success requires HTTP 200 and
+  `permissions.push === true`; then the token is stored in localStorage key
+  `preflopt.githubToken.v1` and the page shows "Connected — can write to
+  ranges_trainer". Failure (401/403/404/no push permission/network) shows a clear
+  message and does NOT store the token.
+- AC10.3 "Remove token" deletes it from localStorage and hides all edit/save UI.
+- AC10.4 The token never appears in: the DOM after saving (input cleared, masked
+  as "•••• last 4"), URLs, console output, error messages, the service-worker cache,
+  or any request other than to `https://api.github.com`.
+- AC10.5 The service worker must not intercept or cache any cross-origin request
+  (api.github.com requests go straight to the network).
+
+### F11 — Chart editor
+- AC11.1 Chart view (F4) shows an "Edit" button only when a token is stored.
+  Route `#/edit/<scenarioKey>`. Without a token, the route shows a message linking
+  to `#/github`.
+- AC11.2 On open, the editor fetches the file from the GitHub contents API
+  (`GET /repos/{o}/{r}/contents/{path}?ref=main`) to get its `sha` and current
+  content. If that content's chart differs from the one the app loaded (deploy
+  lag), the editor uses the GitHub version as the starting point and shows a note
+  "Loaded the latest version from GitHub."
+- AC11.3 Grid starts revealed with the chart's colors. Paint palette = every action
+  valid for the chart type (not only those present), plus "Fold" (eraser):
+  rfi: Open, Fold. defense: 3-Bet, 3-Bet/Call, 3-Bet/Fold, Call, Fold.
+  vs3bet: 4-Bet, 4-Bet/Call, Call, Fold. vs4bet: All-In, All-In/Call, Call, Fold.
+  Tap/drag paint works like F6 (same gesture code, same erase-on-start rule:
+  starting on a cell already set to the selected option sets the gesture to Fold).
+- AC11.4 Cells that differ from the starting chart show a small marker dot.
+  A counter shows the number of changed hands. "Revert" restores the start state.
+  "Save" is disabled when nothing changed.
+- AC11.5 Save shows a confirmation listing changes grouped by action, e.g.
+  "Open: +A9o, +K8s · Fold: +T7s", plus Cancel / Commit buttons.
+- AC11.6 Commit: build the new JSON (F13), validate it with `buildChart` (must not
+  throw), then `PUT /repos/{o}/{r}/contents/{path}` with
+  `{ message: "Edit <chart title> from web app", content: <base64 UTF-8>,
+  sha: <sha from AC11.2>, branch: "main" }`. On success: in-memory chart updated
+  immediately (chart view, recall, unified RFI, category counts all reflect it),
+  toast "Saved to GitHub — live on other devices in about a minute", navigate back
+  to the chart view.
+- AC11.7 On 409 or 422 (sha mismatch): message "This chart changed on GitHub since
+  you opened it. Reload the editor and re-apply your edit." Nothing overwritten;
+  edits stay on screen. On 401/403: "Token rejected — check it in GitHub settings"
+  with a link to `#/github`. On network error: "Couldn't reach GitHub", edits kept.
+  Save button shows a busy state and is not double-submittable.
+- AC11.8 Leaving the editor with unsaved changes (Back link or hash change) asks
+  for confirmation (`confirm()`); declining keeps the user on the editor.
+
+### F12 — Colors saved to the repo
+- AC12.1 `web/palette.json` holds both palettes:
+  `{ "actions": { "fold": null, "call": "#38B359", ... }, "rfi": { "utg": ..., "fold": null } }`
+  with the same keys/defaults as `colors.js`. `null` fold = automatic light/dark gray.
+  It is loaded at boot (same loader path as charts, precached by the SW). If missing
+  or invalid, built-in defaults are used and the app still works.
+- AC12.2 Old localStorage palettes (`preflopt.palette.v1`, `preflopt.rfiPalette.v1`)
+  are ignored and deleted on boot.
+- AC12.3 Colors pages: with no token, pickers are disabled and a note says
+  "Colors come from the repo. Add a GitHub token to change them." With a token,
+  pickers preview live; a "Save colors to GitHub" button (disabled until something
+  changed) commits `web/palette.json` (fetch sha first, same PUT/conflict/error
+  handling as AC11.6–11.7, message "Update colors from web app"). Leaving with
+  unsaved color changes reverts the preview to the saved palette (no prompt needed).
+- AC12.4 Both the Colors page and the RFI Colors page can save; each saves the whole
+  palette file.
+
+### F13 — JSON writing (pure, in domain.js or a new pure module)
+- AC13.1 `serializeRange(set)` produces a compact canonical range string: pairs from
+  high to low, using `XX+` for a run that reaches AA and single tokens otherwise; then
+  suited hands grouped by high rank (A..3), using `HLs+` when the run of low ranks
+  reaches high−1 and single tokens otherwise; then offsuit the same way. Tokens joined
+  by ", ". `parseRange(serializeRange(s))` equals `s` for every subset tested,
+  including all 23 charts' fields and randomized sets.
+- AC13.2 `chartToFileJSON(originalText, editedEntries)` returns the new file text:
+  starts from the original parsed object (key order preserved); for each action
+  field of the chart type, if its hand set changed, replace the string with
+  `serializeRange`; unchanged fields keep their original string byte-for-byte; a
+  field that becomes non-empty but did not exist is added after the existing range
+  fields; a field that becomes empty is kept as `""` (rfi `range` may be `""`).
+  Output is `JSON.stringify(obj, null, 2) + "\n"`.
+- AC13.3 With no edits, output equals the original file text byte-for-byte for all
+  23 charts (test). Output always passes `buildChart`.
+- AC13.4 Base64 encoding handles UTF-8 (e.g. a `note` containing "—" or "♠").
+
+### F14 — Showing saved edits before the deploy finishes
+- AC14.1 After a successful commit, store `{ path, text, savedAt }` in localStorage
+  (`preflopt.pendingWrites.v1`). On boot, for each pending write: if the deployed file
+  equals `text`, delete it; else if `savedAt` is under 30 minutes old, use `text`
+  instead of the deployed file; else delete it. Applies to charts and palette.json.
+- AC14.2 This prevents a just-saved edit from appearing to "revert" when the app is
+  reopened before GitHub Pages redeploys.
+
+### F15 — Security hardening
+- AC15.1 `index.html` has a Content-Security-Policy meta tag:
+  `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';
+  img-src 'self' data:; connect-src 'self' https://api.github.com;
+  manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'self';
+  form-action 'none'`. The app works fully under it (no inline scripts).
+- AC15.2 All user/remote text is inserted with `textContent` / text nodes, never
+  `innerHTML` (chart notes, error messages from GitHub, etc.).

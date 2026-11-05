@@ -1,21 +1,38 @@
-// UI layer: hash routing, DOM building, drag-to-paint, and all views.
-// Pure logic lives in domain.js; palettes in colors.js. This module
-// touches the DOM.
+// UI layer: hash routing, DOM building, drag-to-paint, GitHub connection
+// and chart/palette editors. Pure logic lives in domain.js and serialize.js;
+// palette parsing in colors.js. This module touches the DOM.
 
 import {
   CATEGORIES, GRID_SIZE, TOTAL_COMBOS,
   allHands, handAt, parseScenarioKey, scenarioTitle, scenarioRowLabel,
-  threeBettorGroupTitle, chartsForCategory, chartAction, actionsEqual,
-  actionContains, handCombos, fractionContaining, gradeChart,
+  chartsForCategory, chartAction, actionsEqual,
+  handCombos, fractionContaining, gradeChart,
   pureComboCountFor, mixedComboCount, recallPaletteFor, unifiedRFI,
+  buildChart,
 } from './domain.js';
-import { CHART_FILES, loadAllCharts } from './charts.js';
 import {
-  loadPalette, savePalette, loadRFIPalette, saveRFIPalette,
+  CHART_FILES, fetchChartText, fetchAllChartTexts, parseChartText,
+  buildAllCharts, ChartLoadError,
+} from './charts.js';
+import {
   DEFAULT_PALETTE, DEFAULT_RFI_PALETTE,
+  parsePaletteFile, serializePaletteFile, palettesEqual,
   colorForAction, colorForChartAction, colorForRing,
   resolveAutoFoldColor, foregroundOn,
 } from './colors.js';
+import {
+  PALETTE_APP_PATH, PALETTE_REPO_PATH,
+  appPathToRepoPath,
+} from './config.js';
+import {
+  getToken, setToken, clearToken,
+  loadPendingWrites, savePendingWrites, recordPendingWrite,
+  clearOldPaletteKeys, reconcilePendingWrites,
+} from './store.js';
+import {
+  testConnection, getFile, putFile, GitHubError,
+} from './github.js';
+import { chartToFileJSON } from './serialize.js';
 
 // ------------------- DOM helpers -------------------
 
@@ -31,6 +48,8 @@ function h(tag, attrs = {}, children = []) {
       if (v) el.setAttribute('disabled', '');
     } else if (k === 'checked') {
       if (v) el.checked = true;
+    } else if (k === 'value' && (tag === 'input' || tag === 'textarea')) {
+      el.value = v;
     } else {
       el.setAttribute(k, v);
     }
@@ -54,33 +73,95 @@ function clear(root) { while (root.firstChild) root.removeChild(root.firstChild)
 const state = {
   allCharts: [],
   chartByKey: new Map(),
+  pathByScenarioKey: new Map(),
   unified: null,
-  palette: loadPalette(),
-  rfiPalette: loadRFIPalette(),
+  // Currently-applied palette (edited colors reflect here immediately).
+  palette: { ...DEFAULT_PALETTE },
+  rfiPalette: { ...DEFAULT_RFI_PALETTE },
+  // Palette as last loaded or saved from the repo (used to revert on leave).
+  savedPalette: { ...DEFAULT_PALETTE },
+  savedRfiPalette: { ...DEFAULT_RFI_PALETTE },
+  // Original on-disk texts, used by the editor as a source of truth to diff
+  // against for byte-identical file output.
+  chartTextByPath: new Map(),
   loadError: null,
   // Current view's redraw hook — set by renderers that need to redraw after
   // a palette change.
   onPaletteChange: null,
 };
 
-function setPaletteSlot(key, value) {
-  state.palette = { ...state.palette, [key]: value };
-  savePalette(state.palette);
-  state.onPaletteChange?.();
+// ------------------- Unsaved-changes guard -------------------
+
+let unsavedGuard = null;      // { hash, hasChanges() }
+let suppressNextHashChange = false;
+
+// ------------------- Commit re-entrancy flags -------------------
+// Second invocations while a commit is in flight are ignored instead of
+// relying on the button's `disabled` attribute, which can be bypassed by
+// focus-triggered keyboard activation or by stale references after a
+// re-render.
+let editorCommitInFlight = false;
+let paletteSaveInFlight = false;
+
+function setUnsavedGuard(hash, hasChanges) {
+  unsavedGuard = { hash, hasChanges };
 }
 
-function setRFIPaletteSlot(key, value) {
-  state.rfiPalette = { ...state.rfiPalette, [key]: value };
-  saveRFIPalette(state.rfiPalette);
-  state.onPaletteChange?.();
+function clearUnsavedGuard() { unsavedGuard = null; }
+
+// ------------------- Toasts -------------------
+
+function ensureToastRoot() {
+  let el = document.getElementById('toasts');
+  if (!el) {
+    el = h('div', { id: 'toasts', class: 'toasts', role: 'status', 'aria-live': 'polite' });
+    document.body.appendChild(el);
+  }
+  return el;
 }
 
-function resetPalettes() {
-  state.palette = { ...DEFAULT_PALETTE };
-  state.rfiPalette = { ...DEFAULT_RFI_PALETTE };
-  savePalette(state.palette);
-  saveRFIPalette(state.rfiPalette);
-  state.onPaletteChange?.();
+function toast(message, { kind = 'info', ttl = 4000 } = {}) {
+  const root = ensureToastRoot();
+  // AC F15/UX: cap the visible stack to 2, drop oldest.
+  while (root.children.length >= 2) {
+    root.removeChild(root.firstChild);
+  }
+  const el = h('div', { class: `toast toast-${kind}` }, message);
+  root.appendChild(el);
+  setTimeout(() => { try { el.remove(); } catch {} }, ttl);
+}
+
+// ------------------- Inline error box (text nodes only) -------------------
+
+function tokenRejectedChildren() {
+  // Builds the children of a "Token rejected" inline message using text
+  // nodes and a single anchor. No innerHTML, no HTML parsing of remote
+  // text (AC15.2).
+  return [
+    'Token rejected — check it in ',
+    h('a', { href: '#/github' }, 'GitHub settings'),
+    '.',
+  ];
+}
+
+function setInlineError(container, children) {
+  if (!container) return;
+  clear(container);
+  for (const c of (Array.isArray(children) ? children : [children])) {
+    if (c == null || c === false) continue;
+    if (typeof c === 'string' || typeof c === 'number') {
+      container.appendChild(document.createTextNode(String(c)));
+    } else {
+      container.appendChild(c);
+    }
+  }
+  container.hidden = false;
+}
+
+function clearInlineError(container) {
+  if (!container) return;
+  clear(container);
+  container.hidden = true;
 }
 
 // ------------------- Grid helpers -------------------
@@ -115,13 +196,9 @@ function buildGrid({ interactive = false, onPaint = null, isEraseStart = null } 
 function paintCell(cell, fill, fg, label) {
   cell.style.backgroundColor = fill;
   cell.style.color = fg;
-  if (label != null) cell.firstChild.textContent = label;
+  if (label != null && cell.firstChild) cell.firstChild.textContent = label;
 }
 
-// Drag-to-paint with Pointer Events. The grid uses `touch-action: none` so
-// the page doesn't scroll or zoom during a gesture. On touch, pointer
-// capture keeps the pointerdown target fixed, so we use
-// document.elementFromPoint on move to find the cell under the finger.
 function attachPainting(grid, { onPaint, isEraseStart }) {
   function cellHandAt(x, y) {
     const el = document.elementFromPoint(x, y);
@@ -136,8 +213,6 @@ function attachPainting(grid, { onPaint, isEraseStart }) {
     if (!cell || !grid.contains(cell)) return;
     e.preventDefault();
     const startHand = cell.dataset.hand;
-    // Release implicit touch pointer capture so elementFromPoint sees the
-    // real element under the finger on later moves.
     try { e.target.releasePointerCapture?.(e.pointerId); } catch {}
     const erase = typeof isEraseStart === 'function' ? !!isEraseStart(startHand) : false;
     const activated = new Set();
@@ -277,6 +352,14 @@ function renderHome(root) {
     ]),
     h('div', { class: 'row-chev' }, '›'),
   ]));
+  const hasToken = !!getToken();
+  list.appendChild(h('a', { class: 'row', href: '#/github' }, [
+    h('div', { class: 'row-main' }, [
+      h('div', { class: 'row-title' }, 'GitHub'),
+      h('div', { class: 'row-sub' }, hasToken ? 'Connected — can edit charts' : 'Add a token to edit charts'),
+    ]),
+    h('div', { class: 'row-chev' }, '›'),
+  ]));
 
   clear(root);
   root.appendChild(page('GG 6-Max Cash Ranges', null, [list]));
@@ -401,16 +484,25 @@ function renderChartDetail(root, scenario) {
     href: `#/recall/${chart.scenario.key}`,
   }, 'Practice: Chart Recall');
 
+  const buttons = [toggleBtn, practice];
+  // AC4.5: Edit only when a token is configured.
+  if (getToken()) {
+    buttons.push(h('a', {
+      class: 'btn',
+      href: `#/edit/${chart.scenario.key}`,
+    }, 'Edit'));
+  }
+
   const meta = [];
   if (chart.openSize) meta.push(h('div', { class: 'meta-line' }, `Open size: ${chart.openSize}`));
   if (chart.note) meta.push(h('div', { class: 'meta-line' }, chart.note));
 
-  const back = scenario.kind === 'rfi' ? '#/rfi' : backHrefForScenario(scenario);
+  const back = backHrefForScenario(scenario);
   const body = [
     h('div', { class: 'grid-wrap' }, [grid]),
     legend,
     meta.length ? h('div', { class: 'meta' }, meta) : null,
-    h('div', { class: 'actions' }, [toggleBtn, practice]),
+    h('div', { class: 'actions' }, buttons),
   ].filter(Boolean);
 
   clear(root);
@@ -441,16 +533,10 @@ function renderUnifiedRFI(root) {
   let revealed = true;
   const grid = buildGrid({ interactive: false });
 
-  function cellCA(hand) {
-    const ring = unified.ringFor(hand);
-    if (!ring) return null;
-    return ring;
-  }
-
   function repaint() {
     for (const cell of grid.children) {
       const hand = cell.dataset.hand;
-      const ring = revealed ? cellCA(hand) : null;
+      const ring = revealed ? unified.ringFor(hand) : null;
       const fill = revealed
         ? colorForRing(state.rfiPalette, ring)
         : (state.rfiPalette.fold ?? resolveAutoFoldColor());
@@ -481,16 +567,17 @@ function renderUnifiedRFI(root) {
   }
   buildRFILegend();
 
-  // Per-position RFI recall shortcuts (web-only addition — AC5.4)
-  const practice = h('div', { class: 'practice-group' }, [
-    h('div', { class: 'practice-label' }, 'Practice RFI by position:'),
+  // AC5.4: position buttons now link to the per-position RFI chart view
+  // (which has its own Practice and (with a token) Edit buttons).
+  const positions = ['UTG','MP','CO','BTN','SB']
+    .filter(p => state.chartByKey.has(`rfi.${p.toLowerCase()}`));
+  const positionsRow = h('div', { class: 'practice-group' }, [
+    h('div', { class: 'practice-label' }, 'Open a position RFI chart:'),
     h('div', { class: 'practice-row' },
-      ['UTG','MP','CO','BTN','SB']
-        .filter(p => state.chartByKey.has(`rfi.${p.toLowerCase()}`))
-        .map(p => h('a', {
-          class: 'btn',
-          href: `#/recall/rfi.${p.toLowerCase()}`,
-        }, p))
+      positions.map(p => h('a', {
+        class: 'btn',
+        href: `#/chart/rfi.${p.toLowerCase()}`,
+      }, p))
     ),
   ]);
 
@@ -501,7 +588,7 @@ function renderUnifiedRFI(root) {
     h('div', { class: 'grid-wrap' }, [grid]),
     legend,
     h('div', { class: 'actions' }, [toggle, rfiColors]),
-    practice,
+    positionsRow,
   ]));
 
   state.onPaletteChange = () => { repaint(); buildRFILegend(); };
@@ -662,8 +749,6 @@ function renderRecall(root, scenario) {
 }
 
 function gradedCellColors(grade, chart, hand) {
-  // Spec AC6.5: correct non-fold = green, correct fold = gray, missed =
-  // orange, wrong (both non-fold but differ) = yellow, extra = red.
   const foldFill = foldColor();
   switch (grade) {
     case 'correct': {
@@ -681,44 +766,106 @@ function gradedCellColors(grade, chart, hand) {
   }
 }
 
+// ------------------- Colors -------------------
+
+function tokenGate() { return !!getToken(); }
+
+function setPaletteSlot(key, value) {
+  state.palette = { ...state.palette, [key]: value };
+  state.onPaletteChange?.();
+}
+
+function setRFIPaletteSlot(key, value) {
+  state.rfiPalette = { ...state.rfiPalette, [key]: value };
+  state.onPaletteChange?.();
+}
+
+function paletteDirty() {
+  return !palettesEqual(
+    { palette: state.palette, rfiPalette: state.rfiPalette },
+    { palette: state.savedPalette, rfiPalette: state.savedRfiPalette },
+  );
+}
+
+function revertPaletteToSaved() {
+  state.palette = { ...state.savedPalette };
+  state.rfiPalette = { ...state.savedRfiPalette };
+}
+
 function renderColorsPage(root) {
+  const connected = tokenGate();
+  const note = connected
+    ? h('div', { class: 'meta' }, 'Preview changes locally. Save to GitHub to apply them everywhere.')
+    : h('div', { class: 'error' }, 'Colors come from the repo. Add a GitHub token to change them.');
+
+  // Inline error box, shown above the actions. Hidden by default (AC11.7
+  // palette variant: 401/403 and 409/422 errors appear here, not only as
+  // toasts).
+  const errorBox = h('div', { class: 'error', hidden: true, 'aria-live': 'polite' });
+
+  const resetBtn = h('button', { class: 'btn btn-destructive' }, 'Reset to defaults');
+  const saveBtn = h('button', {
+    class: 'btn btn-primary',
+    disabled: !connected || !paletteDirty(),
+  }, 'Save colors to GitHub');
+
+  function updateSaveDisabled() {
+    saveBtn.disabled = !connected || !paletteDirty();
+  }
+
+  resetBtn.addEventListener('click', () => {
+    // AC7.2: "Reset to defaults" sets the built-in defaults as the unsaved
+    // preview.
+    state.palette = { ...DEFAULT_PALETTE };
+    state.rfiPalette = { ...DEFAULT_RFI_PALETTE };
+    // Re-render current page to refresh pickers and save-button state.
+    renderColorsPage(root);
+  });
+  saveBtn.addEventListener('click', () =>
+    savePaletteToGitHub(root, saveBtn, errorBox, 'colors'));
+
+  const actionsRow = h('div', { class: 'actions' }, [resetBtn, saveBtn]);
+
   const rows = h('div', { class: 'form' }, [
+    note,
     sectionHeader('Pure actions'),
-    colorRow('Fold',   'fold'),
-    colorRow('Call',   'call'),
-    colorRow('Open',   'open'),
-    colorRow('3-Bet',  '3bet'),
-    colorRow('4-Bet',  '4bet'),
-    colorRow('All-In', '5bet'),
+    colorRow('Fold',   'fold', !connected),
+    colorRow('Call',   'call', !connected),
+    colorRow('Open',   'open', !connected),
+    colorRow('3-Bet',  '3bet', !connected),
+    colorRow('4-Bet',  '4bet', !connected),
+    colorRow('All-In', '5bet', !connected),
     sectionHeader('Mixed actions'),
-    colorRow('3-Bet / Call', '3betCall'),
-    colorRow('3-Bet / Fold', '3betFold'),
-    colorRow('4-Bet / Call', '4betCall'),
-    colorRow('All-In / Call', '5betCall'),
+    colorRow('3-Bet / Call', '3betCall', !connected),
+    colorRow('3-Bet / Fold', '3betFold', !connected),
+    colorRow('4-Bet / Call', '4betCall', !connected),
+    colorRow('All-In / Call', '5betCall', !connected),
     h('div', { class: 'actions' }, [
       h('a', { class: 'btn', href: '#/rfi-colors' }, 'Edit RFI Colors →'),
     ]),
-    h('div', { class: 'actions' }, [
-      (() => {
-        const b = h('button', { class: 'btn btn-destructive' }, 'Reset to defaults');
-        b.addEventListener('click', () => { resetPalettes(); renderColorsPage(root); });
-        return b;
-      })(),
-    ]),
+    errorBox,
+    actionsRow,
   ]);
   clear(root);
   root.appendChild(page('Colors', '#/', [rows]));
+
+  // AC12.3/12.4: re-evaluate the save button after every palette change
+  // (pickers, Fold "Auto", etc.) so it enables as soon as something differs
+  // from the saved palette.
+  state.onPaletteChange = updateSaveDisabled;
 }
 
-function colorRow(label, key) {
+function colorRow(label, key, disabled) {
   const current = state.palette[key] ?? resolveAutoFoldColor();
   const picker = h('input', { type: 'color', value: current });
+  if (disabled) picker.setAttribute('disabled', '');
   picker.addEventListener('input', () => setPaletteSlot(key, picker.value));
   const row = h('div', { class: 'form-row' }, [
     h('span', { class: 'form-label' }, label),
     picker,
     key === 'fold' ? (() => {
       const btn = h('button', { class: 'btn btn-small' }, 'Auto');
+      if (disabled) btn.setAttribute('disabled', '');
       btn.addEventListener('click', () => {
         setPaletteSlot('fold', null);
         picker.value = resolveAutoFoldColor();
@@ -729,9 +876,10 @@ function colorRow(label, key) {
   return row;
 }
 
-function rfiColorRow(label, key) {
+function rfiColorRow(label, key, disabled) {
   const current = state.rfiPalette[key] ?? resolveAutoFoldColor();
   const picker = h('input', { type: 'color', value: current });
+  if (disabled) picker.setAttribute('disabled', '');
   picker.addEventListener('input', () => setRFIPaletteSlot(key, picker.value));
   return h('div', { class: 'form-row' }, [
     h('span', { class: 'form-label' }, label),
@@ -743,31 +891,558 @@ function sectionHeader(label) {
   return h('div', { class: 'section-header' }, label);
 }
 
-// Reachable from the unified RFI page (`#/rfi-colors/rfi`) and from the
-// Colors page (`#/rfi-colors`); Back returns to whichever one opened it.
 function renderRFIColorsPage(root, from) {
+  const connected = tokenGate();
   const backHref = from === 'rfi' ? '#/rfi' : '#/colors';
+  const note = connected
+    ? h('div', { class: 'meta' }, 'Preview changes locally. Save to GitHub to apply them everywhere.')
+    : h('div', { class: 'error' }, 'Colors come from the repo. Add a GitHub token to change them.');
+
+  // Inline error box above the actions (AC11.7 palette variant / AC12.3).
+  const errorBox = h('div', { class: 'error', hidden: true, 'aria-live': 'polite' });
+
+  const resetBtn = h('button', { class: 'btn btn-destructive' }, 'Reset to defaults');
+  resetBtn.addEventListener('click', () => {
+    state.rfiPalette = { ...DEFAULT_RFI_PALETTE };
+    renderRFIColorsPage(root, from);
+  });
+  const saveBtn = h('button', {
+    class: 'btn btn-primary',
+    disabled: !connected || !paletteDirty(),
+  }, 'Save colors to GitHub');
+  saveBtn.addEventListener('click', () =>
+    savePaletteToGitHub(root, saveBtn, errorBox, 'rfi', from));
+
+  function updateSaveDisabled() {
+    saveBtn.disabled = !connected || !paletteDirty();
+  }
+
   const rows = h('div', { class: 'form' }, [
+    note,
     sectionHeader('RFI ring colors'),
-    rfiColorRow('UTG',    'utg'),
-    rfiColorRow('MP',     'mp'),
-    rfiColorRow('CO',     'co'),
-    rfiColorRow('BTN/SB', 'btnSb'),
-    rfiColorRow('Fold',   'fold'),
-    h('div', { class: 'actions' }, [
-      (() => {
-        const b = h('button', { class: 'btn btn-destructive' }, 'Reset to defaults');
-        b.addEventListener('click', () => {
-          state.rfiPalette = { ...DEFAULT_RFI_PALETTE };
-          saveRFIPalette(state.rfiPalette);
-          renderRFIColorsPage(root, from);
-        });
-        return b;
-      })(),
-    ]),
+    rfiColorRow('UTG',    'utg',   !connected),
+    rfiColorRow('MP',     'mp',    !connected),
+    rfiColorRow('CO',     'co',    !connected),
+    rfiColorRow('BTN/SB', 'btnSb', !connected),
+    rfiColorRow('Fold',   'fold',  !connected),
+    errorBox,
+    h('div', { class: 'actions' }, [resetBtn, saveBtn]),
   ]);
   clear(root);
   root.appendChild(page('Edit RFI Colors', backHref, [rows]));
+
+  // AC12.3/12.4: re-evaluate the save button after every palette change.
+  state.onPaletteChange = updateSaveDisabled;
+}
+
+async function savePaletteToGitHub(root, button, errorBox, which, from) {
+  // AC: ignore a second invocation while one is already in flight; don't
+  // rely only on the button's disabled attribute.
+  if (paletteSaveInFlight) return;
+  const token = getToken();
+  if (!token) {
+    toast('Add a GitHub token first', { kind: 'error' });
+    location.hash = '#/github';
+    return;
+  }
+  if (!paletteDirty()) return;
+  clearInlineError(errorBox);
+  paletteSaveInFlight = true;
+  button.setAttribute('disabled', '');
+  const prevLabel = button.textContent;
+  button.textContent = 'Saving…';
+  try {
+    const { sha } = await getFile(token, PALETTE_REPO_PATH);
+    const text = serializePaletteFile(state.palette, state.rfiPalette);
+    await putFile(token, PALETTE_REPO_PATH, {
+      message: 'Update colors from web app',
+      text,
+      sha,
+    });
+    recordPendingWrite(PALETTE_APP_PATH, text);
+    state.savedPalette = { ...state.palette };
+    state.savedRfiPalette = { ...state.rfiPalette };
+    toast('Saved to GitHub — live on other devices in about a minute', { kind: 'success' });
+    paletteSaveInFlight = false;
+    // Re-render whichever colors page we were on so the save button
+    // disables.
+    if (which === 'rfi') renderRFIColorsPage(root, from);
+    else renderColorsPage(root);
+  } catch (err) {
+    paletteSaveInFlight = false;
+    button.removeAttribute('disabled');
+    button.textContent = prevLabel;
+    handleGitHubError(err, { context: 'palette', inlineBox: errorBox });
+  }
+}
+
+function handleGitHubError(err, { context = 'other', inlineBox = null } = {}) {
+  const kind = err?.kind || 'other';
+  if (kind === 'conflict') {
+    // AC11.7: the chart-editor variant message is EXACT.
+    const msg = context === 'editor'
+      ? 'This chart changed on GitHub since you opened it. Reload the editor and re-apply your edit.'
+      : context === 'palette'
+      ? 'Colors changed on GitHub since you opened this page. Reload and re-apply your change.'
+      : 'This file changed on GitHub since you opened it. Reload and try again.';
+    toast(msg, { kind: 'error', ttl: 7000 });
+    if (inlineBox) setInlineError(inlineBox, [msg]);
+    return;
+  }
+  if (kind === 'unauthorized' || kind === 'forbidden') {
+    // AC11.7: 401/403 must appear INLINE on the page (with a link to the
+    // GitHub settings page) and not only as a toast.
+    toast('Token rejected — check it in GitHub settings', { kind: 'error', ttl: 7000 });
+    if (inlineBox) setInlineError(inlineBox, tokenRejectedChildren());
+    return;
+  }
+  if (kind === 'network') {
+    const msg = "Couldn't reach GitHub. Edits are kept.";
+    toast(msg, { kind: 'error', ttl: 7000 });
+    if (inlineBox) setInlineError(inlineBox, [msg]);
+    return;
+  }
+  const msg = err?.message || 'Save failed';
+  toast(msg, { kind: 'error', ttl: 7000 });
+  if (inlineBox) setInlineError(inlineBox, [msg]);
+}
+
+// ------------------- GitHub settings -------------------
+
+function renderGitHubPage(root) {
+  const existing = getToken();
+  const explain = h('p', { class: 'prose' },
+    'A GitHub token lets this app save edits (charts and colors) back to the repo. ' +
+    'Create a fine-grained personal access token with access limited to the ' +
+    'ranges_trainer repo, Repository permissions → Contents: Read and write, and nothing else.');
+  const createLink = h('p', { class: 'prose dim' }, [
+    'Create one at: ',
+    h('span', { class: 'mono' }, 'github.com → Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token'),
+  ]);
+
+  const input = h('input', {
+    type: 'password',
+    autocomplete: 'off',
+    autocapitalize: 'off',
+    autocorrect: 'off',
+    spellcheck: 'false',
+    placeholder: 'github_pat_…',
+    class: 'token-input',
+    'aria-label': 'GitHub token',
+  });
+  const status = h('div', { class: 'token-status' });
+
+  function renderStatus() {
+    clear(status);
+    const t = getToken();
+    if (t) {
+      const last4 = t.length >= 4 ? t.slice(-4) : t;
+      status.appendChild(h('div', { class: 'meta' },
+        `Connected — can write to ranges_trainer (last 4: •••• ${last4})`));
+    }
+  }
+  renderStatus();
+
+  const saveBtn = h('button', { class: 'btn btn-primary' }, 'Save & test');
+  saveBtn.addEventListener('click', async () => {
+    const token = input.value.trim();
+    if (!token) {
+      toast('Enter a token first', { kind: 'error' });
+      return;
+    }
+    saveBtn.setAttribute('disabled', '');
+    saveBtn.textContent = 'Testing…';
+    try {
+      await testConnection(token);
+      setToken(token);
+      input.value = '';                          // AC10.4: clear from DOM
+      toast('Connected — can write to ranges_trainer', { kind: 'success' });
+      // Re-render so "Remove token" appears immediately now that we have
+      // a token (and the home-page hint will update on next visit).
+      renderGitHubPage(root);
+    } catch (err) {
+      saveBtn.removeAttribute('disabled');
+      saveBtn.textContent = 'Save & test';
+      // AC10.2: failure does NOT store the token.
+      const msg = err instanceof GitHubError
+        ? `Can't use that token: ${err.message}`
+        : `Can't use that token: ${err?.message || err}`;
+      toast(msg, { kind: 'error', ttl: 7000 });
+    }
+  });
+
+  const removeBtn = h('button', { class: 'btn btn-destructive' }, 'Remove token');
+  removeBtn.addEventListener('click', () => {
+    if (!getToken()) return;
+    if (!confirm('Remove the stored GitHub token?')) return;
+    clearToken();
+    toast('Token removed', { kind: 'info' });
+    // Re-render so "Remove token" disappears immediately.
+    renderGitHubPage(root);
+  });
+
+  const buttons = h('div', { class: 'actions' }, [saveBtn, existing ? removeBtn : null].filter(Boolean));
+
+  const form = h('div', { class: 'form' }, [
+    explain,
+    createLink,
+    h('div', { class: 'form-row' }, [
+      h('span', { class: 'form-label' }, 'Token'),
+      input,
+    ]),
+    buttons,
+    status,
+  ]);
+  clear(root);
+  root.appendChild(page('GitHub', '#/', [form]));
+}
+
+// ------------------- Editor -------------------
+
+function actionsForChartType(chartType) {
+  // AC11.3: paint palette = every valid action for the chart type, plus Fold.
+  if (chartType === 'rfi') return [
+    { label: 'Open', answer: { kind: 'pure', action: 'open' } },
+    { label: 'Fold', answer: { kind: 'pure', action: 'fold' } },
+  ];
+  if (chartType === 'defense') return [
+    { label: '3-Bet',       answer: { kind: 'pure', action: '3bet' } },
+    { label: '3-Bet/Call',  answer: { kind: 'mixed', aggressive: '3bet', passive: 'call' } },
+    { label: '3-Bet/Fold',  answer: { kind: 'mixed', aggressive: '3bet', passive: 'fold' } },
+    { label: 'Call',        answer: { kind: 'pure', action: 'call' } },
+    { label: 'Fold',        answer: { kind: 'pure', action: 'fold' } },
+  ];
+  if (chartType === 'vs3bet') return [
+    { label: '4-Bet',       answer: { kind: 'pure', action: '4bet' } },
+    { label: '4-Bet/Call',  answer: { kind: 'mixed', aggressive: '4bet', passive: 'call' } },
+    { label: 'Call',        answer: { kind: 'pure', action: 'call' } },
+    { label: 'Fold',        answer: { kind: 'pure', action: 'fold' } },
+  ];
+  if (chartType === 'vs4bet') return [
+    { label: 'All-In',      answer: { kind: 'pure', action: '5bet' } },
+    { label: 'All-In/Call', answer: { kind: 'mixed', aggressive: '5bet', passive: 'call' } },
+    { label: 'Call',        answer: { kind: 'pure', action: 'call' } },
+    { label: 'Fold',        answer: { kind: 'pure', action: 'fold' } },
+  ];
+  return [{ label: 'Fold', answer: { kind: 'pure', action: 'fold' } }];
+}
+
+function entriesFromChart(chart) {
+  const map = new Map();
+  for (const [h, ca] of chart.entries) map.set(h, { ...ca });
+  return map;
+}
+
+function labelForAction(ca) {
+  if (!ca || (ca.kind === 'pure' && ca.action === 'fold')) return 'Fold';
+  if (ca.kind === 'pure') {
+    if (ca.action === 'open') return 'Open';
+    if (ca.action === '3bet') return '3-Bet';
+    if (ca.action === '4bet') return '4-Bet';
+    if (ca.action === '5bet') return 'All-In';
+    if (ca.action === 'call') return 'Call';
+  }
+  if (ca.kind === 'mixed') {
+    if (ca.aggressive === '3bet' && ca.passive === 'call') return '3-Bet/Call';
+    if (ca.aggressive === '3bet' && ca.passive === 'fold') return '3-Bet/Fold';
+    if (ca.aggressive === '4bet' && ca.passive === 'call') return '4-Bet/Call';
+    if (ca.aggressive === '5bet' && ca.passive === 'call') return 'All-In/Call';
+  }
+  return '?';
+}
+
+function pureFold() { return { kind: 'pure', action: 'fold' }; }
+function isFold(ca) { return !ca || (ca.kind === 'pure' && ca.action === 'fold'); }
+
+async function renderEditor(root, scenario) {
+  // Guard: without a token, the route shows a message linking to the token
+  // page (AC11.1).
+  const token = getToken();
+  if (!token) {
+    clear(root);
+    root.appendChild(page('Editor', `#/chart/${scenario.key}`, [
+      h('div', { class: 'error' }, 'An editor needs a GitHub token.'),
+      h('div', { class: 'actions' }, [
+        h('a', { class: 'btn btn-primary', href: '#/github' }, 'Add a token'),
+      ]),
+    ]));
+    return;
+  }
+
+  const inMemory = state.chartByKey.get(scenario.key);
+  if (!inMemory) { renderError(root, `Chart not found: ${scenario.key}`); return; }
+
+  // Loading state
+  clear(root);
+  root.appendChild(page(`Edit ${scenarioTitle(scenario)}`, `#/chart/${scenario.key}`, [
+    h('div', { class: 'loading' }, 'Loading latest version from GitHub…'),
+  ]));
+
+  const appPath = state.pathByScenarioKey.get(scenario.key);
+  if (!appPath) { renderError(root, `Unknown chart path for ${scenario.key}`); return; }
+  const repoPath = appPathToRepoPath(appPath);
+
+  // AC: capture the route hash before the await. If the user navigated
+  // away by the time getFile resolves/rejects, abort without rendering
+  // and without installing an unsaved-changes guard.
+  const capturedHash = location.hash;
+
+  let sha, originalText, originalChart;
+  try {
+    const got = await getFile(token, repoPath);
+    if (location.hash !== capturedHash) return;
+    sha = got.sha;
+    originalText = got.text;
+    originalChart = parseChartText(appPath, originalText);
+  } catch (err) {
+    if (location.hash !== capturedHash) return;
+    clear(root);
+    const isAuth = err instanceof GitHubError && (err.kind === 'unauthorized' || err.kind === 'forbidden');
+    const body = [];
+    if (isAuth) {
+      // Inline, with a link to the GitHub settings page (text nodes only).
+      body.push(h('div', { class: 'error' }, tokenRejectedChildren()));
+      body.push(h('div', { class: 'actions' }, [
+        h('a', { class: 'btn btn-primary', href: '#/github' }, 'Open GitHub settings'),
+      ]));
+    } else {
+      body.push(h('div', { class: 'error' },
+        err instanceof GitHubError
+          ? `Couldn't open the latest version from GitHub: ${err.message}`
+          : `Couldn't open the latest version: ${err?.message || err}`));
+    }
+    root.appendChild(page(`Edit ${scenarioTitle(scenario)}`, `#/chart/${scenario.key}`, body));
+    return;
+  }
+
+  // Detect divergence between what the app loaded and what GitHub currently
+  // has (deploy lag). We use the GitHub version as the start state (AC11.2).
+  const divergedFromMemory = !sameEntries(inMemory.entries, originalChart.entries);
+
+  const chartType = originalChart.scenario.kind;
+  const options = actionsForChartType(chartType);
+  let selectedIdx = 0;
+
+  const editedEntries = entriesFromChart(originalChart); // hand → ChartAction (may be pure fold if we add one explicitly)
+  const originalEntries = entriesFromChart(originalChart);
+
+  function entryAt(hand) {
+    const ca = editedEntries.get(hand);
+    return ca || pureFold();
+  }
+  function origAt(hand) {
+    const ca = originalEntries.get(hand);
+    return ca || pureFold();
+  }
+  function isChanged(hand) { return !actionsEqual(entryAt(hand), origAt(hand)); }
+
+  function countChanged() {
+    let n = 0;
+    for (const hand of allHands()) if (isChanged(hand)) n++;
+    return n;
+  }
+
+  const grid = buildGrid({
+    interactive: true,
+    isEraseStart(hand) {
+      // Starting on a cell already set to the selected option sets the
+      // gesture to Fold (same erase-on-start rule as recall).
+      const current = entryAt(hand);
+      const sel = options[selectedIdx].answer;
+      return actionsEqual(current, sel);
+    },
+    onPaint(hand, erase) {
+      const sel = erase ? pureFold() : options[selectedIdx].answer;
+      if (isFold(sel)) editedEntries.delete(hand);
+      else editedEntries.set(hand, sel);
+      paintEditorCell(grid.querySelector(`.cell[data-hand="${hand}"]`), hand);
+      updateCounter();
+    },
+  });
+
+  function paintEditorCell(cell, hand) {
+    if (!cell) return;
+    const ca = entryAt(hand);
+    const fill = colorForChartAction(state.palette, ca);
+    paintCell(cell, fill, foregroundOn(fill));
+    cell.classList.toggle('changed', isChanged(hand));
+  }
+  function paintAll() {
+    for (const cell of grid.children) paintEditorCell(cell, cell.dataset.hand);
+  }
+  paintAll();
+
+  const paletteRow = h('div', { class: 'palette-row' });
+  function renderPaletteRow() {
+    clear(paletteRow);
+    options.forEach((o, i) => {
+      const btn = h('button', {
+        class: 'palette-btn' + (i === selectedIdx ? ' selected' : ''),
+        'aria-pressed': i === selectedIdx ? 'true' : 'false',
+      }, [
+        h('span', {
+          class: 'swatch',
+          style: `background-color: ${colorForChartAction(state.palette, o.answer)}`,
+        }),
+        h('span', { class: 'palette-label' }, o.label),
+      ]);
+      btn.addEventListener('click', () => {
+        selectedIdx = i;
+        renderPaletteRow();
+      });
+      paletteRow.appendChild(btn);
+    });
+  }
+  renderPaletteRow();
+
+  const counter = h('span', { class: 'count-num' }, '0');
+  function updateCounter() {
+    const n = countChanged();
+    counter.textContent = String(n);
+    saveBtn.toggleAttribute('disabled', n === 0);
+    revertBtn.toggleAttribute('disabled', n === 0);
+  }
+
+  const revertBtn = h('button', { class: 'btn', disabled: true }, 'Revert');
+  revertBtn.addEventListener('click', () => {
+    for (const h of allHands()) editedEntries.delete(h);
+    for (const [k, v] of originalEntries) editedEntries.set(k, { ...v });
+    paintAll();
+    updateCounter();
+  });
+
+  const saveBtn = h('button', { class: 'btn btn-primary', disabled: true }, 'Save');
+  // Inline error box above the actions (AC11.7). Shown only on error.
+  const errorBox = h('div', { class: 'error', hidden: true, 'aria-live': 'polite' });
+  saveBtn.addEventListener('click', () => openSaveConfirm({
+    scenario, appPath, repoPath, originalText, originalEntries, editedEntries, sha, saveBtn, options, errorBox,
+  }));
+
+  const divergedNote = divergedFromMemory
+    ? h('div', { class: 'meta' }, 'Loaded the latest version from GitHub.')
+    : null;
+
+  const promptText = chartType === 'rfi'
+    ? 'Tap cells to toggle open/fold.'
+    : 'Pick an action below, then paint cells.';
+
+  clear(root);
+  root.appendChild(page(`Edit ${scenarioTitle(scenario)}`, `#/chart/${scenario.key}`, [
+    divergedNote,
+    h('div', { class: 'prompt' }, promptText),
+    h('div', { class: 'grid-wrap' }, [grid]),
+    h('div', { class: 'palette-wrap' }, [
+      paletteRow,
+      h('span', { class: 'count-wrap' }, [h('span', {}, 'Changed: '), counter]),
+    ]),
+    errorBox,
+    h('div', { class: 'actions' }, [revertBtn, saveBtn]),
+  ].filter(Boolean)));
+
+  setUnsavedGuard(location.hash, () => countChanged() > 0);
+  state.onPaletteChange = () => { renderPaletteRow(); paintAll(); };
+}
+
+function sameEntries(a, b) {
+  const keys = new Set([...a.keys(), ...b.keys()]);
+  for (const k of keys) {
+    const x = a.get(k) || pureFold();
+    const y = b.get(k) || pureFold();
+    if (!actionsEqual(x, y)) return false;
+  }
+  return true;
+}
+
+function openSaveConfirm(ctx) {
+  const { scenario, appPath, repoPath, originalText, originalEntries, editedEntries, sha, saveBtn, options, errorBox } = ctx;
+  const diffsByLabel = new Map();
+  for (const hand of allHands()) {
+    const o = originalEntries.get(hand) || pureFold();
+    const e = editedEntries.get(hand) || pureFold();
+    if (actionsEqual(o, e)) continue;
+    const label = labelForAction(e);
+    const arr = diffsByLabel.get(label) || [];
+    arr.push(hand);
+    diffsByLabel.set(label, arr);
+  }
+
+  // Order groups by palette order so "Open: +… · Fold: +…" reads naturally.
+  const order = options.map(o => o.label);
+  const groups = [...diffsByLabel.entries()]
+    .sort((a, b) => order.indexOf(a[0]) - order.indexOf(b[0]));
+  const summary = groups
+    .map(([label, hands]) => `${label}: ${hands.map(h => '+' + h).join(', ')}`)
+    .join(' · ');
+
+  const modal = h('div', { class: 'modal-backdrop' }, [
+    h('div', { class: 'modal' }, [
+      h('h2', { class: 'modal-title' }, `Save ${scenarioTitle(scenario)}?`),
+      h('p', { class: 'modal-body' }, summary || 'No changes.'),
+      h('div', { class: 'actions modal-actions' }, [
+        (() => {
+          const b = h('button', { class: 'btn' }, 'Cancel');
+          b.addEventListener('click', () => modal.remove());
+          return b;
+        })(),
+        (() => {
+          const b = h('button', { class: 'btn btn-primary' }, 'Commit');
+          b.addEventListener('click', async () => {
+            // AC: ignore a second invocation while one is already in
+            // flight; don't rely only on the button's disabled attribute.
+            if (editorCommitInFlight) return;
+            editorCommitInFlight = true;
+            clearInlineError(errorBox);
+            b.setAttribute('disabled', ''); b.textContent = 'Saving…';
+            saveBtn.setAttribute('disabled', '');
+            try {
+              const text = chartToFileJSON(originalText, editedEntries);
+              // Validate before pushing: must parse and buildChart (AC11.6).
+              const validated = buildChart(JSON.parse(text));
+              const token = getToken();
+              await putFile(token, repoPath, {
+                message: `Edit ${scenarioTitle(scenario)} from web app`,
+                text,
+                sha,
+              });
+              recordPendingWrite(appPath, text);
+              // Apply the new chart in memory so the browser sees the edit
+              // immediately (AC11.6).
+              state.chartTextByPath.set(appPath, text);
+              applyChartInMemory(validated);
+              clearUnsavedGuard();
+              modal.remove();
+              toast('Saved to GitHub — live on other devices in about a minute', { kind: 'success', ttl: 6000 });
+              editorCommitInFlight = false;
+              location.hash = `#/chart/${scenario.key}`;
+            } catch (err) {
+              editorCommitInFlight = false;
+              b.removeAttribute('disabled'); b.textContent = 'Commit';
+              saveBtn.removeAttribute('disabled');
+              // AC11.7: 401/403 and 409/422 render INLINE on the editor
+              // page (not only as toasts). Close the modal so the user can
+              // see the inline message above the actions.
+              modal.remove();
+              handleGitHubError(err, { context: 'editor', inlineBox: errorBox });
+            }
+          });
+          return b;
+        })(),
+      ]),
+    ]),
+  ]);
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) modal.remove();
+  });
+  document.body.appendChild(modal);
+}
+
+function applyChartInMemory(chart) {
+  const key = chart.scenario.key;
+  const idx = state.allCharts.findIndex(c => c.scenario.key === key);
+  if (idx >= 0) state.allCharts[idx] = chart;
+  else state.allCharts.push(chart);
+  state.chartByKey.set(key, chart);
+  state.unified = unifiedRFI(state.allCharts);
 }
 
 // ------------------- Router -------------------
@@ -784,13 +1459,28 @@ function parseHash() {
     case 'category':    return { name: 'category', id: parts[1] };
     case 'chart':       return { name: 'chart', key: parts.slice(1).join('/') };
     case 'recall':      return { name: 'recall', key: parts.slice(1).join('/') };
+    case 'edit':        return { name: 'edit', key: parts.slice(1).join('/') };
+    case 'github':      return { name: 'github' };
     default:            return { name: 'home' };
   }
 }
 
 function route(root) {
   state.onPaletteChange = null;
+  // Clear any stray modal backdrop (e.g. the editor's save-confirm modal)
+  // that could survive a hash-driven navigation.
+  for (const m of document.body.querySelectorAll('.modal-backdrop')) {
+    m.remove();
+  }
+  // Any navigation to a non-colors page reverts the preview to the last
+  // saved palette (AC12.3). The editor itself does not touch the palette.
   const r = parseHash();
+  if (r.name !== 'colors' && r.name !== 'rfiColors') {
+    if (paletteDirty()) revertPaletteToSaved();
+  }
+  if (r.name !== 'edit') {
+    clearUnsavedGuard();
+  }
   if (state.loadError) {
     renderError(root, state.loadError.message || String(state.loadError));
     return;
@@ -801,6 +1491,7 @@ function route(root) {
     case 'colors':    renderColorsPage(root); break;
     case 'rfiColors': renderRFIColorsPage(root, r.from); break;
     case 'category':  renderCategory(root, r.id); break;
+    case 'github':    renderGitHubPage(root); break;
     case 'chart': {
       const sc = parseScenarioKey(r.key || '');
       if (!sc) { renderError(root, `Invalid scenario key: ${r.key}`); return; }
@@ -813,41 +1504,116 @@ function route(root) {
       renderRecall(root, sc);
       break;
     }
+    case 'edit': {
+      const sc = parseScenarioKey(r.key || '');
+      if (!sc) { renderError(root, `Invalid scenario key: ${r.key}`); return; }
+      renderEditor(root, sc);
+      break;
+    }
     default: renderHome(root);
   }
 }
 
+function handleHashChange(root) {
+  if (suppressNextHashChange) { suppressNextHashChange = false; return; }
+  if (unsavedGuard && location.hash !== unsavedGuard.hash && unsavedGuard.hasChanges()) {
+    const ok = confirm('Leave the editor? Your unsaved changes will be lost.');
+    if (!ok) {
+      // Restore the editor hash without re-rendering. AC11.8: declining keeps
+      // the user on the editor.
+      suppressNextHashChange = true;
+      const target = unsavedGuard.hash;
+      // Direct hash assignment; the second firing of hashchange is swallowed
+      // by `suppressNextHashChange`.
+      try { location.hash = target; } catch {}
+      return;
+    }
+    // Accepted: fall through to route.
+    unsavedGuard = null;
+  }
+  route(root);
+}
+
 // ------------------- Boot -------------------
+
+async function fetchText(path) {
+  const res = await fetch(path, { cache: 'default' });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return await res.text();
+}
 
 async function boot() {
   const root = document.getElementById('app');
-  // Loading indicator
   clear(root);
   root.appendChild(h('div', { class: 'loading' }, 'Loading charts…'));
 
+  // AC12.2: delete legacy palette localStorage keys on every boot.
+  clearOldPaletteKeys();
+
   try {
-    state.allCharts = await loadAllCharts();
+    // Fetch deployed texts for charts + palette in parallel.
+    const [chartTexts, paletteText] = await Promise.all([
+      fetchAllChartTexts(),
+      fetchText(`./${PALETTE_APP_PATH}`).catch(() => null),
+    ]);
+
+    // Reconcile pending writes (AC14.1).
+    const deployed = { ...chartTexts };
+    if (paletteText != null) deployed[PALETTE_APP_PATH] = paletteText;
+    const pending = loadPendingWrites();
+    const { pending: keptPending, overrides } =
+      reconcilePendingWrites(pending, deployed, Date.now());
+    savePendingWrites(keptPending);
+
+    // Apply overrides and parse.
+    const effectiveChartTexts = { ...chartTexts, ...pickCharts(overrides) };
+    state.chartTextByPath = new Map(Object.entries(effectiveChartTexts));
+    state.allCharts = buildAllCharts(effectiveChartTexts);
     state.chartByKey = new Map(state.allCharts.map(c => [c.scenario.key, c]));
     state.unified = unifiedRFI(state.allCharts);
+    state.pathByScenarioKey = new Map();
+    for (let i = 0; i < CHART_FILES.length; i++) {
+      state.pathByScenarioKey.set(state.allCharts[i].scenario.key, CHART_FILES[i]);
+    }
+
+    const paletteSource = overrides[PALETTE_APP_PATH]
+      || paletteText
+      || null;
+    if (paletteSource) {
+      const { palette, rfiPalette } = parsePaletteFile(paletteSource);
+      state.palette = palette;
+      state.rfiPalette = rfiPalette;
+      state.savedPalette = { ...palette };
+      state.savedRfiPalette = { ...rfiPalette };
+    } else {
+      state.palette = { ...DEFAULT_PALETTE };
+      state.rfiPalette = { ...DEFAULT_RFI_PALETTE };
+      state.savedPalette = { ...DEFAULT_PALETTE };
+      state.savedRfiPalette = { ...DEFAULT_RFI_PALETTE };
+    }
   } catch (err) {
     state.loadError = err;
   }
 
   route(root);
-  window.addEventListener('hashchange', () => route(root));
+  window.addEventListener('hashchange', () => handleHashChange(root));
 
-  // Dark-mode auto fold color: when the system scheme flips and no explicit
-  // override exists, repaint the active view in place. Re-routing would
-  // destroy an in-progress recall grid, so we call the view's palette
-  // hook if it set one.
+  // Repaint when the system scheme flips if the fold is auto.
   const mql = matchMedia?.('(prefers-color-scheme: dark)');
   mql?.addEventListener?.('change', () => state.onPaletteChange?.());
 
-  // Register service worker (relative URL so it works on GitHub Pages).
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     try { await navigator.serviceWorker.register('./sw.js'); }
     catch (err) { console.warn('SW registration failed:', err); }
   }
+}
+
+function pickCharts(obj) {
+  const out = {};
+  for (const [k, v] of Object.entries(obj || {})) {
+    if (CHART_FILES.includes(k)) out[k] = v;
+  }
+  return out;
 }
 
 boot();

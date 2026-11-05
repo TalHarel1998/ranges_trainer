@@ -1,19 +1,17 @@
-// Color palettes with localStorage persistence. The "fold" slot defaults to
-// a semantic value that adapts to light/dark mode via CSS; when the user
-// picks a specific color we store the hex and that override wins everywhere.
-
-const STORAGE_KEY = 'preflopt.palette.v1';
-const RFI_STORAGE_KEY = 'preflopt.rfiPalette.v1';
+// Color palettes. In this version the palette lives in `web/palette.json`
+// in the repo — not in localStorage. The runtime consumes it as plain
+// objects; writing new values back to the repo is done by the editor flow
+// (app.js), not here.
 
 // null for `fold` means "use the semantic auto-adapting default from CSS".
 export const DEFAULT_PALETTE = Object.freeze({
   fold:          null,
-  call:          '#38B359', // 0.22, 0.70, 0.35
-  open:          '#EB4D4D', // 0.92, 0.30, 0.30
+  call:          '#38B359',
+  open:          '#EB4D4D',
   '3bet':        '#EB4D4D',
   '4bet':        '#EB4D4D',
   '5bet':        '#EB4D4D',
-  '3betCall':    '#F5CC33', // 0.96, 0.80, 0.20
+  '3betCall':    '#F5CC33',
   '3betFold':    '#F5CC33',
   '4betCall':    '#F5CC33',
   '5betCall':    '#F5CC33',
@@ -21,14 +19,15 @@ export const DEFAULT_PALETTE = Object.freeze({
 
 export const DEFAULT_RFI_PALETTE = Object.freeze({
   utg:   '#EB4D4D',
-  mp:    '#F28C26', // 0.95, 0.55, 0.15
+  mp:    '#F28C26',
   co:    '#F5CC33',
   btnSb: '#38B359',
   fold:  null,
 });
 
-// Default colors used when `fold === null`. Resolved against the current
-// `prefers-color-scheme` so legend swatches and painted cells both agree.
+// Default fold colors used when `fold === null`. Resolved against the
+// current `prefers-color-scheme` so legend swatches and painted cells
+// both agree.
 export function resolveAutoFoldColor(isDark = systemIsDark()) {
   return isDark ? '#2C2C2E' : '#E5E5EA';
 }
@@ -38,38 +37,63 @@ export function systemIsDark() {
   return matchMedia('(prefers-color-scheme: dark)').matches;
 }
 
+const HEX = /^#[0-9a-fA-F]{6}$/;
+
 function sanitise(obj, defaults) {
   const out = { ...defaults };
+  if (!obj || typeof obj !== 'object') return out;
   for (const k of Object.keys(defaults)) {
-    const v = obj?.[k];
+    if (!(k in obj)) continue;
+    const v = obj[k];
     if (v === null) { out[k] = null; continue; }
-    if (typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v)) out[k] = v;
+    if (typeof v === 'string' && HEX.test(v)) out[k] = v;
   }
   return out;
 }
 
-export function loadPalette() {
+// Parse a palette.json payload. Missing or invalid values fall back to the
+// built-in defaults. Returns `{ palette, rfiPalette }` (both plain objects).
+export function parsePaletteFile(text) {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { ...DEFAULT_PALETTE };
-    return sanitise(JSON.parse(raw), DEFAULT_PALETTE);
-  } catch { return { ...DEFAULT_PALETTE }; }
+    const raw = (typeof text === 'string') ? JSON.parse(text) : text;
+    const actions = raw?.actions ?? raw?.palette;
+    const rfi = raw?.rfi ?? raw?.rfiPalette;
+    return {
+      palette: sanitise(actions, DEFAULT_PALETTE),
+      rfiPalette: sanitise(rfi, DEFAULT_RFI_PALETTE),
+    };
+  } catch {
+    return { palette: { ...DEFAULT_PALETTE }, rfiPalette: { ...DEFAULT_RFI_PALETTE } };
+  }
 }
 
-export function savePalette(p) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(p)); } catch {}
+// Serialize to the exact file format we want in the repo (2-space JSON +
+// trailing newline). Preserves key order from DEFAULT_PALETTE and
+// DEFAULT_RFI_PALETTE so the output is stable regardless of in-memory
+// mutation order.
+export function serializePaletteFile(palette, rfiPalette) {
+  const ordered = (obj, defaults) => {
+    const out = {};
+    for (const k of Object.keys(defaults)) out[k] = obj[k] ?? null;
+    return out;
+  };
+  const obj = {
+    actions: ordered(palette, DEFAULT_PALETTE),
+    rfi:     ordered(rfiPalette, DEFAULT_RFI_PALETTE),
+  };
+  return JSON.stringify(obj, null, 2) + '\n';
 }
 
-export function loadRFIPalette() {
-  try {
-    const raw = localStorage.getItem(RFI_STORAGE_KEY);
-    if (!raw) return { ...DEFAULT_RFI_PALETTE };
-    return sanitise(JSON.parse(raw), DEFAULT_RFI_PALETTE);
-  } catch { return { ...DEFAULT_RFI_PALETTE }; }
-}
+// Deep-ish structural equality for a palette pair.
+// Hex colors compare case-insensitively: <input type=color> reports lowercase
+// ("#38b359") while palette.json uses uppercase ("#38B359").
+const sameColor = (x, y) =>
+  x === y || (x != null && y != null && String(x).toLowerCase() === String(y).toLowerCase());
 
-export function saveRFIPalette(p) {
-  try { localStorage.setItem(RFI_STORAGE_KEY, JSON.stringify(p)); } catch {}
+export function palettesEqual(a, b) {
+  for (const k of Object.keys(DEFAULT_PALETTE)) if (!sameColor(a.palette[k], b.palette[k])) return false;
+  for (const k of Object.keys(DEFAULT_RFI_PALETTE)) if (!sameColor(a.rfiPalette[k], b.rfiPalette[k])) return false;
+  return true;
 }
 
 // ---- Chart action → color -------------------------------------------------
@@ -86,7 +110,7 @@ export function colorForChartAction(palette, ca) {
   if (ca.aggressive === '3bet' && ca.passive === 'fold') return palette['3betFold'];
   if (ca.aggressive === '4bet' && ca.passive === 'call') return palette['4betCall'];
   if (ca.aggressive === '5bet' && ca.passive === 'call') return palette['5betCall'];
-  return palette['3betCall']; // unexpected mix: fall back to 3-bet/call
+  return palette['3betCall'];
 }
 
 // ---- RFI ring → color -----------------------------------------------------
@@ -102,9 +126,6 @@ export function colorForRing(palette, ring) {
 }
 
 // ---- Contrast -------------------------------------------------------------
-//
-// BT.601 luminance on normalised sRGB. "> 0.6 → dark text, else white"
-// matches the Swift ColorPalette.contrastingForeground.
 
 export function luminance(hex) {
   if (!hex || hex[0] !== '#') return 0;

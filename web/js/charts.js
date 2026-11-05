@@ -48,33 +48,56 @@ export class ChartLoadError extends Error {
   }
 }
 
-async function fetchChart(path) {
+// Fetch the raw text for a single chart path. Does NOT parse.
+export async function fetchChartText(path) {
   const res = await fetch(path, { cache: 'default' });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const dto = await res.json();
-  return buildChart(dto);
+  return await res.text();
 }
 
-export async function loadChart(path) {
+// Parse a chart file's text into a domain chart. Wraps errors so the caller
+// knows which file failed.
+export function parseChartText(path, text) {
   try {
-    return await fetchChart(path);
+    return buildChart(JSON.parse(text));
   } catch (err) {
     throw new ChartLoadError(path, err);
   }
 }
 
-// Load every chart in parallel. On the first failure, surfaces a
-// ChartLoadError that names the failing file (per AC1.5).
-export async function loadAllCharts() {
-  const results = await Promise.allSettled(CHART_FILES.map(fetchChart));
-  const charts = [];
+// Fetch raw text for every chart file in parallel. Returns a map
+// { path: text } for every file that fetched successfully, and throws a
+// ChartLoadError on the first failure.
+export async function fetchAllChartTexts() {
+  const results = await Promise.allSettled(CHART_FILES.map(fetchChartText));
+  const texts = {};
   for (let i = 0; i < results.length; i++) {
     const r = results[i];
     if (r.status === 'fulfilled') {
-      charts.push(r.value);
+      texts[CHART_FILES[i]] = r.value;
     } else {
       throw new ChartLoadError(CHART_FILES[i], r.reason);
     }
   }
+  return texts;
+}
+
+// Build every chart from a prefetched text map. Any parse error is wrapped
+// in a ChartLoadError naming the file (AC1.5).
+export function buildAllCharts(texts) {
+  const charts = [];
+  for (const path of CHART_FILES) {
+    const text = texts[path];
+    if (typeof text !== 'string') {
+      throw new ChartLoadError(path, new Error('No text provided'));
+    }
+    charts.push(parseChartText(path, text));
+  }
   return charts;
+}
+
+// Convenience: fetch and parse in one go. Preserves prior API.
+export async function loadAllCharts() {
+  const texts = await fetchAllChartTexts();
+  return buildAllCharts(texts);
 }

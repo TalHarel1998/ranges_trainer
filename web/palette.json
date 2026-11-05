@@ -1,0 +1,21 @@
+{
+  "actions": {
+    "fold": null,
+    "call": "#38B359",
+    "open": "#EB4D4D",
+    "3bet": "#EB4D4D",
+    "4bet": "#EB4D4D",
+    "5bet": "#EB4D4D",
+    "3betCall": "#F5CC33",
+    "3betFold": "#F5CC33",
+    "4betCall": "#F5CC33",
+    "5betCall": "#F5CC33"
+  },
+  "rfi": {
+    "utg": "#EB4D4D",
+    "mp": "#F28C26",
+    "co": "#F5CC33",
+    "btnSb": "#38B359",
+    "fold": null
+  }
+}
