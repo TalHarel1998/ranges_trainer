@@ -44,6 +44,17 @@ html, body {
   font: 15px/1.4 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
+  /* F16.1: suppress the iOS double-tap-to-zoom gesture everywhere, so
+     every quick double tap on buttons / links / rows / grids reaches the
+     app as two normal taps. Pinch-to-zoom is unaffected (F16.2). */
+  touch-action: manipulation;
+}
+
+/* F16.1: belt-and-braces — interactive elements explicitly opt in to the
+   same behavior in case a browser treats `touch-action` as non-inherited
+   on them. `.grid.interactive` overrides this to `none` below. */
+a, button, .btn, .row, input, .palette-btn {
+  touch-action: manipulation;
 }
 
 a { color: inherit; text-decoration: none; }
@@ -130,6 +141,8 @@ button { font: inherit; cursor: pointer; }
   /* Thin border improves contrast when a pill color matches the row
      background (e.g. a very pale custom palette). */
   border: 1px solid rgba(0,0,0,0.08);
+  /* Split gradients start at the border edge so they don't repeat into it. */
+  background-origin: border-box;
 }
 
 .empty {
@@ -190,6 +203,19 @@ button { font: inherit; cursor: pointer; }
   overflow: hidden;
 }
 
+/* F17.4: when a split cell's two halves disagree on readable text color
+   (per the AC7.3 luminance rule), we paint white text with a dark outline
+   so the hand label reads on both halves. The outline uses text-shadow
+   so there's no layout cost. */
+.count-pill.split-text,
+.cell.split-text .cell-label {
+  text-shadow:
+    0 1px 1px rgba(0, 0, 0, 0.85),
+    0 -1px 1px rgba(0, 0, 0, 0.85),
+    1px 0 1px rgba(0, 0, 0, 0.85),
+    -1px 0 1px rgba(0, 0, 0, 0.85);
+}
+
 /* ---------- Legend ---------- */
 
 .legend {
@@ -209,6 +235,7 @@ button { font: inherit; cursor: pointer; }
   border-radius: 3px;
   border: 1px solid rgba(0,0,0,0.15);
   flex-shrink: 0;
+  background-origin: border-box;
 }
 
 .legend-label { font-weight: 500; }

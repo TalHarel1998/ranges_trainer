@@ -113,6 +113,35 @@ export function colorForChartAction(palette, ca) {
   return palette['3betCall'];
 }
 
+// F17: paint value for a cell / swatch / pill. Returns a CSS background
+// value (solid color or a hard-edged 50/50 linear-gradient for mixed
+// actions), a foreground text color, and whether the text needs a dark
+// outline because the two halves disagree on readable text color
+// (AC17.4). The passive leg of a mixed action always resolves against the
+// palette's current pure color (fold → palette.fold ?? auto fold gray), so
+// e.g. 3-Bet/Fold uses the active fold color, not any stored mixed slot.
+export function cellFill(palette, ca) {
+  if (!ca || (ca.kind === 'pure' && ca.action === 'fold')) {
+    const c = colorForAction(palette, 'fold');
+    return { background: c, fg: foregroundOn(c), outline: false };
+  }
+  if (ca.kind === 'pure') {
+    const c = colorForAction(palette, ca.action);
+    return { background: c, fg: foregroundOn(c), outline: false };
+  }
+  if (ca.kind === 'mixed') {
+    const left = colorForAction(palette, ca.aggressive);
+    const right = colorForAction(palette, ca.passive);
+    const background = `linear-gradient(to right, ${left} 50%, ${right} 50%)`;
+    const fgL = foregroundOn(left);
+    const fgR = foregroundOn(right);
+    if (fgL === fgR) return { background, fg: fgL, outline: false };
+    return { background, fg: '#ffffff', outline: true };
+  }
+  const c = colorForAction(palette, 'fold');
+  return { background: c, fg: foregroundOn(c), outline: false };
+}
+
 // ---- RFI ring → color -----------------------------------------------------
 
 export function colorForRing(palette, ring) {

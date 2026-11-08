@@ -296,3 +296,36 @@ path `web/palette.json`.
   form-action 'none'`. The app works fully under it (no inline scripts).
 - AC15.2 All user/remote text is inserted with `textContent` / text nodes, never
   `innerHTML` (chart notes, error messages from GitHub, etc.).
+
+### F16 — No double-tap zoom
+- AC16.1 A quick double tap anywhere in the app (buttons such as Show/Hide, links,
+  rows, grids) never zooms the page on iPhone Safari / home-screen app. Each tap is
+  delivered as a normal tap. Implemented with CSS `touch-action: manipulation` on
+  `html`, `body` and all interactive elements (`a`, `button`, `.btn`, `.row`,
+  `input`, `.palette-btn`, read-only `.grid`); `.grid.interactive` keeps
+  `touch-action: none`.
+- AC16.2 Pinch-to-zoom stays possible (accessibility): the viewport meta must NOT
+  add `maximum-scale` or `user-scalable=no`.
+
+### F17 — Split cells for mixed actions
+- AC17.1 Every grid cell whose action is `mixed(aggressive, passive)` is drawn
+  split vertically: left half = the aggressive action's pure color, right half = the
+  passive action's pure color (call → call color, fold → fold color, incl. the
+  automatic light/dark fold gray). E.g. 3-Bet/Call = left 3-bet red, right call
+  green; 3-Bet/Fold = left red, right fold gray. Hard edge at exactly 50%
+  (`linear-gradient(to right, L 50%, R 50%)`).
+- AC17.2 Applies in: chart view (revealed), chart editor (start state and painted
+  cells), Chart Recall while painting. Recall graded cells (green/orange/yellow/red)
+  stay solid. Unified RFI has no mixed cells.
+- AC17.3 The same split is used for swatches of mixed options: chart legend "mix"
+  item, recall and editor paint-option buttons, and the "N mix" count pill in
+  category rows.
+- AC17.4 Cell label legibility: if both halves call for the same text color
+  (AC7.3 rule), use it; otherwise use white text with a dark outline
+  (`text-shadow`) so it reads on both halves.
+- AC17.5 Mixed colors are no longer drawn anywhere, so the four mixed pickers
+  (3-Bet/Call, 3-Bet/Fold, 4-Bet/Call, All-In/Call) are removed from the Colors page.
+  Their keys stay in `web/palette.json` unchanged (the file format is not changed;
+  saving colors keeps those values as they are).
+- AC17.6 Changing a pure color (e.g. call) immediately updates the matching half of
+  every mixed cell and swatch.

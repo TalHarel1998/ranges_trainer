@@ -17,7 +17,7 @@ import {
 import {
   DEFAULT_PALETTE, DEFAULT_RFI_PALETTE,
   parsePaletteFile, serializePaletteFile, palettesEqual,
-  colorForAction, colorForChartAction, colorForRing,
+  colorForAction, colorForChartAction, colorForRing, cellFill,
   resolveAutoFoldColor, foregroundOn,
 } from './colors.js';
 import {
@@ -202,10 +202,14 @@ function buildGrid({ interactive = false, onPaint = null, isEraseStart = null } 
   return grid;
 }
 
-function paintCell(cell, fill, fg, label) {
-  cell.style.backgroundColor = fill;
+function paintCell(cell, fill, fg, outline) {
+  // `fill` may be a solid color (e.g. "#38B359") or a CSS gradient (used
+  // by F17 split cells for mixed actions). Using the `background`
+  // shorthand means a later solid color correctly clears any previously
+  // applied gradient.
+  cell.style.background = fill;
   cell.style.color = fg;
-  if (label != null && cell.firstChild) cell.firstChild.textContent = label;
+  cell.classList.toggle('split-text', !!outline);
 }
 
 function attachPainting(grid, { onPaint, isEraseStart }) {
@@ -252,8 +256,9 @@ function attachPainting(grid, { onPaint, isEraseStart }) {
 function pct(frac) { return (frac * 100).toFixed(1) + '%'; }
 
 function legendItemEl(fill, label, frac) {
+  // `fill` may be a solid color or a CSS gradient (F17 mixed swatches).
   return h('div', { class: 'legend-item' }, [
-    h('span', { class: 'swatch', style: `background-color: ${fill}` }),
+    h('span', { class: 'swatch', style: `background: ${fill}` }),
     h('span', { class: 'legend-label' }, label),
     h('span', { class: 'legend-pct' }, pct(frac)),
   ]);
@@ -278,11 +283,12 @@ function buildChartLegend(chart) {
     const pFrac = pure3 / TOTAL_COMBOS, mFrac = (mc + mf) / TOTAL_COMBOS, cFrac = pc / TOTAL_COMBOS;
     const fFrac = Math.max(0, 1 - pFrac - mFrac - cFrac);
     let mixLabel = 'Mix';
+    let mixCa = { kind: 'mixed', aggressive: '3bet', passive: 'call' };
     if (mc > 0 && mf === 0) mixLabel = '3-Bet/Call';
-    else if (mf > 0 && mc === 0) mixLabel = '3-Bet/Fold';
+    else if (mf > 0 && mc === 0) { mixLabel = '3-Bet/Fold'; mixCa = { kind: 'mixed', aggressive: '3bet', passive: 'fold' }; }
     else if (mc > 0 && mf > 0) mixLabel = 'Mixed';
     items.push(legendItemEl(colorForAction(state.palette, '3bet'), '3-Bet', pFrac));
-    if (mFrac > 0) items.push(legendItemEl(state.palette['3betCall'], mixLabel, mFrac));
+    if (mFrac > 0) items.push(legendItemEl(cellFill(state.palette, mixCa).background, mixLabel, mFrac));
     if (cFrac > 0) items.push(legendItemEl(colorForAction(state.palette, 'call'), 'Call', cFrac));
     items.push(legendItemEl(foldColor(), 'Fold', fFrac));
   } else if (chart.scenario.kind === 'vs3bet') {
@@ -295,7 +301,9 @@ function buildChartLegend(chart) {
     const pFrac = p4 / TOTAL_COMBOS, mFrac = mc / TOTAL_COMBOS, cFrac = pc / TOTAL_COMBOS;
     const fFrac = Math.max(0, 1 - pFrac - mFrac - cFrac);
     items.push(legendItemEl(colorForAction(state.palette, '4bet'), '4-Bet', pFrac));
-    if (mFrac > 0) items.push(legendItemEl(state.palette['4betCall'], '4-Bet/Call', mFrac));
+    if (mFrac > 0) items.push(legendItemEl(
+      cellFill(state.palette, { kind: 'mixed', aggressive: '4bet', passive: 'call' }).background,
+      '4-Bet/Call', mFrac));
     if (cFrac > 0) items.push(legendItemEl(colorForAction(state.palette, 'call'), 'Call', cFrac));
     items.push(legendItemEl(foldColor(), 'Fold', fFrac));
   } else if (chart.scenario.kind === 'vs4bet') {
@@ -308,7 +316,9 @@ function buildChartLegend(chart) {
     const pFrac = p5 / TOTAL_COMBOS, mFrac = mc / TOTAL_COMBOS, cFrac = pc / TOTAL_COMBOS;
     const fFrac = Math.max(0, 1 - pFrac - mFrac - cFrac);
     items.push(legendItemEl(colorForAction(state.palette, '5bet'), 'All-In', pFrac));
-    if (mFrac > 0) items.push(legendItemEl(state.palette['5betCall'], 'All-In/Call', mFrac));
+    if (mFrac > 0) items.push(legendItemEl(
+      cellFill(state.palette, { kind: 'mixed', aggressive: '5bet', passive: 'call' }).background,
+      'All-In/Call', mFrac));
     if (cFrac > 0) items.push(legendItemEl(colorForAction(state.palette, 'call'), 'Call', cFrac));
     items.push(legendItemEl(foldColor(), 'Fold', fFrac));
   }
@@ -374,12 +384,36 @@ function renderHome(root) {
   root.appendChild(page('GG 6-Max Cash Ranges', null, [list]));
 }
 
+// The mixed action a defense chart's "mix" pill should show, chosen the same
+// way as the legend: 3-Bet/Fold when the chart only has 3-Bet/Fold mixes,
+// otherwise 3-Bet/Call.
+function defenseMixAction(chart) {
+  let hasCall = false, hasFold = false;
+  for (const ca of chart.entries.values()) {
+    if (ca.kind !== 'mixed' || ca.aggressive !== '3bet') continue;
+    if (ca.passive === 'call') hasCall = true;
+    else if (ca.passive === 'fold') hasFold = true;
+  }
+  const passive = hasFold && !hasCall ? 'fold' : 'call';
+  return { kind: 'mixed', aggressive: '3bet', passive };
+}
+
 function categoryRowContent(chart) {
   const scenario = chart.scenario;
   const pill = (color, text) => h('span', {
     class: 'count-pill',
     style: `background-color: ${color}; color: ${foregroundOn(color)}`,
   }, text);
+  // F17.3: mix pill uses the same 50/50 split as grid cells. For
+  // category rows we show the representative split for the chart type
+  // (defense → 3-Bet/Call, vs3bet → 4-Bet/Call, vs4bet → All-In/Call).
+  const mixPill = (ca, text) => {
+    const { background, fg, outline } = cellFill(state.palette, ca);
+    return h('span', {
+      class: 'count-pill' + (outline ? ' split-text' : ''),
+      style: `background: ${background}; color: ${fg}`,
+    }, text);
+  };
   if (scenario.kind === 'rfi') {
     const openCombos = pureComboCountFor(chart, 'open');
     return [
@@ -403,7 +437,7 @@ function categoryRowContent(chart) {
       ]),
       h('div', { class: 'row-counts' }, [
         t > 0 && pill(colorForAction(state.palette, '3bet'), `${t} 3-bet`),
-        m > 0 && pill(state.palette['3betCall'], `${m} mix`),
+        m > 0 && mixPill(defenseMixAction(chart), `${m} mix`),
         c > 0 && pill(colorForAction(state.palette, 'call'), `${c} call`),
       ].filter(Boolean)),
     ];
@@ -419,7 +453,7 @@ function categoryRowContent(chart) {
       ]),
       h('div', { class: 'row-counts' }, [
         t > 0 && pill(colorForAction(state.palette, '4bet'), `${t} 4-bet`),
-        m > 0 && pill(state.palette['4betCall'], `${m} mix`),
+        m > 0 && mixPill({ kind: 'mixed', aggressive: '4bet', passive: 'call' }, `${m} mix`),
         c > 0 && pill(colorForAction(state.palette, 'call'), `${c} call`),
       ].filter(Boolean)),
     ];
@@ -435,7 +469,7 @@ function categoryRowContent(chart) {
       ]),
       h('div', { class: 'row-counts' }, [
         t > 0 && pill(colorForAction(state.palette, '5bet'), `${t} all-in`),
-        m > 0 && pill(state.palette['5betCall'], `${m} mix`),
+        m > 0 && mixPill({ kind: 'mixed', aggressive: '5bet', passive: 'call' }, `${m} mix`),
         c > 0 && pill(colorForAction(state.palette, 'call'), `${c} call`),
       ].filter(Boolean)),
     ];
@@ -473,8 +507,8 @@ function renderChartDetail(root, scenario) {
     for (const cell of grid.children) {
       const hand = cell.dataset.hand;
       const ca = revealed ? chartAction(chart, hand) : { kind: 'pure', action: 'fold' };
-      const fill = colorForChartAction(state.palette, ca);
-      paintCell(cell, fill, foregroundOn(fill));
+      const { background, fg, outline } = cellFill(state.palette, ca);
+      paintCell(cell, background, fg, outline);
     }
   }
   repaint();
@@ -549,7 +583,7 @@ function renderUnifiedRFI(root) {
       const fill = revealed
         ? colorForRing(state.rfiPalette, ring)
         : (state.rfiPalette.fold ?? resolveAutoFoldColor());
-      paintCell(cell, fill, foregroundOn(fill));
+      paintCell(cell, fill, foregroundOn(fill), false);
     }
   }
   repaint();
@@ -640,16 +674,17 @@ function renderRecall(root, scenario) {
     if (phase === 'graded') {
       const g = gradeResult.grades.get(hand);
       const { fill, fg } = gradedCellColors(g, chart, hand);
-      paintCell(cell, fill, fg);
+      // Graded cells stay solid (AC17.2): no outline, no split.
+      paintCell(cell, fill, fg, false);
       return;
     }
     const answer = painted.get(hand);
     if (answer) {
-      const fill = colorForChartAction(state.palette, answer);
-      paintCell(cell, fill, foregroundOn(fill));
+      const { background, fg, outline } = cellFill(state.palette, answer);
+      paintCell(cell, background, fg, outline);
     } else {
       const fill = foldColor();
-      paintCell(cell, fill, foregroundOn(fill));
+      paintCell(cell, fill, foregroundOn(fill), false);
     }
   }
   function repaintCell(hand) {
@@ -671,7 +706,7 @@ function renderRecall(root, scenario) {
       }, [
         h('span', {
           class: 'swatch',
-          style: `background-color: ${colorForChartAction(state.palette, o.answer)}`,
+          style: `background: ${cellFill(state.palette, o.answer).background}`,
         }),
         h('span', { class: 'palette-label' }, o.label),
       ]);
@@ -844,11 +879,9 @@ function renderColorsPage(root) {
     colorRow('3-Bet',  '3bet', !connected),
     colorRow('4-Bet',  '4bet', !connected),
     colorRow('All-In', '5bet', !connected),
-    sectionHeader('Mixed actions'),
-    colorRow('3-Bet / Call', '3betCall', !connected),
-    colorRow('3-Bet / Fold', '3betFold', !connected),
-    colorRow('4-Bet / Call', '4betCall', !connected),
-    colorRow('All-In / Call', '5betCall', !connected),
+    // AC17.5: mixed-action pickers removed. Mixed cells are drawn as a
+    // 50/50 split of the two pure legs, so the four mixed slots have no
+    // visual effect. Their keys stay in palette.json unchanged.
     h('div', { class: 'actions' }, [
       h('a', { class: 'btn', href: '#/rfi-colors' }, 'Edit RFI Colors →'),
     ]),
@@ -1276,8 +1309,8 @@ async function renderEditor(root, scenario) {
   function paintEditorCell(cell, hand) {
     if (!cell) return;
     const ca = entryAt(hand);
-    const fill = colorForChartAction(state.palette, ca);
-    paintCell(cell, fill, foregroundOn(fill));
+    const { background, fg, outline } = cellFill(state.palette, ca);
+    paintCell(cell, background, fg, outline);
     cell.classList.toggle('changed', isChanged(hand));
   }
   function paintAll() {
@@ -1295,7 +1328,7 @@ async function renderEditor(root, scenario) {
       }, [
         h('span', {
           class: 'swatch',
-          style: `background-color: ${colorForChartAction(state.palette, o.answer)}`,
+          style: `background: ${cellFill(state.palette, o.answer).background}`,
         }),
         h('span', { class: 'palette-label' }, o.label),
       ]);

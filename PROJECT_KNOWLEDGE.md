@@ -4,7 +4,7 @@ Read this first. It is the single place for how this repo works, current status,
 commands, and decisions. Keep it up to date when you change something that a future
 person or agent would need to know.
 
-Last updated: 2026-11-05 (in-app editing of charts and colors via GitHub).
+Last updated: 2026-11-05 (split cells for mixed actions, no double-tap zoom).
 
 ## 1. What this repo is
 
@@ -13,7 +13,7 @@ It has two front-ends that share the same chart data:
 
 | App | Folder | Status | How it runs |
 |---|---|---|---|
-| iOS app "PreflopT" (Swift/SwiftUI) | `PreflopT/` | Working; sideloaded with a free Apple account, so it expires every 7 days | Xcode → device |
+| iOS app "PreflopT" (Swift/SwiftUI) | `PreflopT/` | **Legacy — no new work.** Kept only because the chart JSON lives inside it | Xcode → device |
 | Web app (PWA) | `web/` | Working; the replacement for daily use | GitHub Pages → Safari "Add to Home Screen" |
 
 GitHub: https://github.com/TalHarel1998/ranges_trainer (public).
@@ -21,6 +21,9 @@ Web URL: https://talharel1998.github.io/ranges_trainer/
 
 **Branching:** work directly on `main`; it is the only branch. Every push to
 `main` deploys the web app.
+
+**Scope:** all new work is web-only. Don't port features to iOS or ask whether
+to; the chart JSON files under `PreflopT/` are still edited (they're shared).
 
 ## 2. Repo layout
 
@@ -208,6 +211,17 @@ Without a token, the color pickers are disabled.
 - **Data loading:** at boot the app fetches all 23 chart files and `palette.json`
   as text, applies any pending writes (section 5), then parses them. A missing or
   invalid `palette.json` falls back to the built-in defaults in `colors.js`.
+- **Split cells for mixed actions (F17):** a mixed cell is drawn half and half:
+  the left half is the aggressive action's color, the right half the passive
+  one's (e.g. 3-Bet/Call = red | green, 3-Bet/Fold = red | fold gray).
+  `cellFill()` in `colors.js` builds the colors for cells, legend swatches,
+  palette buttons and "mix" pills. When the halves need different text colors,
+  the label is white with a dark outline. Recall grading colors stay solid. The
+  four mixed color slots are still in `palette.json` but are no longer drawn or
+  shown in Colors.
+- **No double-tap zoom (F16):** `touch-action: manipulation` on `html`, `body` and
+  interactive elements, so fast taps (e.g. Show/Hide) never zoom. Pinch-to-zoom
+  still works; don't add `maximum-scale`/`user-scalable=no` to the viewport.
 - **Drag-to-paint (recall and editor):** Pointer Events + `document.elementFromPoint`.
   A gesture that starts on a cell already painted with the selected option erases.
   Only `.grid.interactive` has `touch-action: none`. Read-only grids must keep
