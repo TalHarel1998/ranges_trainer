@@ -69,7 +69,10 @@ const CHART_FILES = [
   'charts/vs_4bet/vs4b_sb_vs_btn.json',
 ];
 
-const PRECACHE = [...APP_SHELL, ...CHART_FILES];
+// F18: frozen GTO copies, so "Restore to GTO" works offline too.
+const GTO_FILES = CHART_FILES.map(p => p.replace(/^charts\//, 'gto/'));
+
+const PRECACHE = [...APP_SHELL, ...CHART_FILES, ...GTO_FILES];
 
 self.addEventListener('install', (event) => {
   event.waitUntil((async () => {

@@ -47,3 +47,13 @@ export function repoPathToAppPath(repoPath) {
   }
   return null;
 }
+
+// F18: frozen GTO snapshot of every chart, used by "Restore to GTO" in the
+// editor. `charts/defense/bb_vs_btn.json` → `gto/defense/bb_vs_btn.json`.
+// These files are never edited by the app; update them only on purpose.
+export const GTO_APP_PREFIX = 'gto/';
+
+export function gtoPathFor(appPath) {
+  if (!appPath.startsWith(CHART_APP_PREFIX)) throw new Error(`Not a chart path: ${appPath}`);
+  return GTO_APP_PREFIX + appPath.slice(CHART_APP_PREFIX.length);
+}

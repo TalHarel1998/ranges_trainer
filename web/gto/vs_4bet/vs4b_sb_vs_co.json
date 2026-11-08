@@ -1,0 +1,7 @@
+{
+  "scenario": "vs4b.sb.vs.co",
+  "chartType": "vs4bet",
+  "fiveBet": "AA, KK, AKs, AKo",
+  "mixed5betCall": "QQ, ATs, A5s",
+  "call": "JJ, TT, 99, 88, 77, 66, 55, AQs, AJs, A4s, KQs, T9s, 98s, 87s, 76s, 65s, 54s"
+}

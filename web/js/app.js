@@ -21,7 +21,7 @@ import {
   resolveAutoFoldColor, foregroundOn,
 } from './colors.js';
 import {
-  PALETTE_APP_PATH, PALETTE_REPO_PATH,
+  PALETTE_APP_PATH, PALETTE_REPO_PATH, gtoPathFor,
   appPathToRepoPath,
 } from './config.js';
 import {
@@ -1357,11 +1357,38 @@ async function renderEditor(root, scenario) {
     updateCounter();
   });
 
+  // F18: load the frozen GTO snapshot (web/gto/...) into the grid as an
+  // unsaved edit. Changed cells are marked and nothing is written until Save.
+  const restoreBtn = h('button', { class: 'btn' }, 'Restore to GTO');
+  let restoredGto = null; // { text, entries } of the snapshot last restored
+  restoreBtn.addEventListener('click', async () => {
+    restoreBtn.setAttribute('disabled', '');
+    try {
+      const gtoText = await fetchChartText(gtoPathFor(appPath));
+      const gto = parseChartText(appPath, gtoText);
+      restoredGto = { text: gtoText, entries: gto.entries };
+      for (const h of allHands()) editedEntries.delete(h);
+      for (const [k, v] of gto.entries) editedEntries.set(k, { ...v });
+      paintAll();
+      updateCounter();
+      const n = countChanged();
+      toast(n === 0
+        ? 'Already matches GTO.'
+        : `Restored GTO: ${n} cell${n === 1 ? '' : 's'} changed. Tap Save to commit.`,
+      { kind: 'info' });
+    } catch (err) {
+      setInlineError(errorBox, [`Couldn't load the GTO version: ${err?.message || err}`]);
+    } finally {
+      restoreBtn.removeAttribute('disabled');
+    }
+  });
+
   const saveBtn = h('button', { class: 'btn btn-primary', disabled: true }, 'Save');
   // Inline error box above the actions (AC11.7). Shown only on error.
   const errorBox = h('div', { class: 'error', hidden: true, 'aria-live': 'polite' });
   saveBtn.addEventListener('click', () => openSaveConfirm({
     scenario, appPath, repoPath, originalText, originalEntries, editedEntries, sha, saveBtn, options, errorBox,
+    getRestoredGto: () => restoredGto,
   }));
 
   const divergedNote = divergedFromMemory
@@ -1382,7 +1409,7 @@ async function renderEditor(root, scenario) {
       h('span', { class: 'count-wrap' }, [h('span', {}, 'Changed: '), counter]),
     ]),
     errorBox,
-    h('div', { class: 'actions' }, [revertBtn, saveBtn]),
+    h('div', { class: 'actions' }, [revertBtn, restoreBtn, saveBtn]),
   ].filter(Boolean)));
 
   setUnsavedGuard(location.hash, () => countChanged() > 0);
@@ -1441,7 +1468,12 @@ function openSaveConfirm(ctx) {
             b.setAttribute('disabled', ''); b.textContent = 'Saving…';
             saveBtn.setAttribute('disabled', '');
             try {
-              const text = chartToFileJSON(originalText, editedEntries);
+              // F18: if the grid matches the GTO snapshot exactly, commit
+              // the frozen file itself so the JSON text matches it too.
+              const gto = ctx.getRestoredGto?.();
+              const text = gto && sameEntries(editedEntries, gto.entries)
+                ? gto.text
+                : chartToFileJSON(originalText, editedEntries);
               // Validate before pushing: must parse and buildChart (AC11.6).
               const validated = buildChart(JSON.parse(text));
               const token = getToken();
@@ -1588,7 +1620,36 @@ async function fetchText(path) {
   return await res.text();
 }
 
+// F16 (revised): iOS can still zoom on a quick double tap even with
+// `touch-action: manipulation`. When a second tap ends within 350 ms of the
+// previous one, cancel its default (the zoom) and deliver the click
+// ourselves, so fast Show/Hide taps toggle twice instead of zooming.
+// Pinch zoom uses multiple fingers and is untouched. Painting on the
+// interactive grid uses pointer events, which fire before this.
+function installDoubleTapGuard() {
+  let lastTouchEnd = 0;
+  document.addEventListener('touchend', (e) => {
+    const now = e.timeStamp || Date.now();
+    const quick = now - lastTouchEnd < 350;
+    lastTouchEnd = now;
+    if (!quick || e.touches.length > 0 || e.changedTouches.length !== 1) return;
+    e.preventDefault();
+    const t = e.changedTouches[0];
+    const target = document.elementFromPoint(t.clientX, t.clientY) || e.target;
+    if (target.closest?.('.grid.interactive')) return; // painting is pointer-driven
+    const clickable = target.closest?.('button, a, input, label, .palette-btn');
+    if (clickable && !clickable.disabled) {
+      if (clickable.matches('input[type=password], input[type=text]')) {
+        clickable.focus();
+      } else {
+        clickable.click();
+      }
+    }
+  }, { passive: false });
+}
+
 async function boot() {
+  installDoubleTapGuard();
   const root = document.getElementById('app');
   clear(root);
   root.appendChild(h('div', { class: 'loading' }, 'Loading charts…'));

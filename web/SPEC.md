@@ -329,3 +329,24 @@ path `web/palette.json`.
   saving colors keeps those values as they are).
 - AC17.6 Changing a pure color (e.g. call) immediately updates the matching half of
   every mixed cell and swatch.
+
+### F16 revision — double-tap guard
+- AC16.3 `touch-action: manipulation` alone did not stop double-tap zoom on the
+  owner's iPhone. A document `touchend` listener now cancels the default of a
+  single-finger tap that ends within 350 ms of the previous one, and delivers the
+  click itself (`button`, `a`, `input`, `label`, `.palette-btn`). Fast taps on
+  Show/Hide toggle twice. Painting on `.grid.interactive` is pointer-driven and is
+  unaffected. Pinch zoom (multi-touch) is unaffected.
+
+### F18 — Frozen GTO snapshot and "Restore to GTO"
+- AC18.1 `web/gto/<group>/<file>.json` is a frozen copy of every chart, taken on
+  2026-11-08 from `main` (after commit 214247c). The app never writes these
+  files; they change only by a deliberate commit.
+- AC18.2 The chart editor has a "Restore to GTO" button. It loads the snapshot
+  for that chart into the grid as an unsaved edit: changed cells get the marker,
+  the counter updates, and nothing is written until Save → Commit. A toast says
+  how many cells changed ("Already matches GTO." when none).
+- AC18.3 If the grid at commit time equals the snapshot exactly, the committed
+  file text is the snapshot file byte for byte.
+- AC18.4 The service worker precaches the 23 GTO files, so Restore works offline
+  (the commit itself needs a connection).

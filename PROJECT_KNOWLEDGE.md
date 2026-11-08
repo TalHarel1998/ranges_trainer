@@ -220,8 +220,16 @@ Without a token, the color pickers are disabled.
   four mixed color slots are still in `palette.json` but are no longer drawn or
   shown in Colors.
 - **No double-tap zoom (F16):** `touch-action: manipulation` on `html`, `body` and
-  interactive elements, so fast taps (e.g. Show/Hide) never zoom. Pinch-to-zoom
-  still works; don't add `maximum-scale`/`user-scalable=no` to the viewport.
+  interactive elements was not enough on the owner's iPhone, so `app.js`
+  (`installDoubleTapGuard`) also cancels a tap that ends within 350 ms of the
+  previous one and fires the click itself. Pinch-to-zoom still works; don't add
+  `maximum-scale`/`user-scalable=no` to the viewport.
+- **Frozen GTO snapshot (F18):** `web/gto/` holds a frozen copy of all 23 charts
+  (taken 2026-11-08, after commit 214247c, so it includes the phone edits to BTN
+  vs UTG made before then). The editor's **Restore to GTO** button paints that
+  version as an unsaved edit; Save commits it. The app never writes `web/gto/`.
+  To re-freeze on purpose: `cp -R PreflopT/PreflopT/Resources/Charts/. web/gto/`,
+  then commit. New chart files need a copy in `web/gto/` too (a test checks).
 - **Drag-to-paint (recall and editor):** Pointer Events + `document.elementFromPoint`.
   A gesture that starts on a cell already painted with the selected option erases.
   Only `.grid.interactive` has `touch-action: none`. Read-only grids must keep
