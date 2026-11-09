@@ -4,7 +4,7 @@ Read this first. It is the single place for how this repo works, current status,
 commands, and decisions. Keep it up to date when you change something that a future
 person or agent would need to know.
 
-Last updated: 2026-11-08 (BB vs SB chart + c-bet raise drill).
+Last updated: 2026-11-09 (status, decisions and legacy-iOS notes brought up to date).
 
 ## 1. What this repo is
 
@@ -119,8 +119,9 @@ The in-app editor only edits existing charts. To add a new one:
    (`CHART_FILES`). Browsers can't list directories, and a file missing from
    `sw.js` won't work offline. Update the count in the test
    `CHART_FILES ... has 24 unique entries`. Also copy the file into `web/gto/` (its frozen GTO version; a test checks every chart has one).
-3. iOS: add a line to `BundledChartRepository.manifest` in
-   `PreflopT/PreflopT/Data/ChartRepository.swift`.
+3. iOS (legacy, optional): the iOS app only loads charts listed in
+   `BundledChartRepository.manifest` (`PreflopT/PreflopT/Data/ChartRepository.swift`).
+   New charts are no longer added there.
 4. Run `node --test web/tests/*.test.mjs`, then push to `main`.
 
 ## 5. Editing from the iPhone (or any browser)
@@ -250,7 +251,7 @@ Without a token, the color pickers are disabled.
   page scrolling.
 - **Service worker (`sw.js`):**
   - It precaches the app shell (including all `js/*` modules and `palette.json`),
-    the 24 charts and the icons. Add new modules to `APP_SHELL`.
+    the 24 charts, their `web/gto/` copies and the icons. Add new modules to `APP_SHELL`.
   - Navigations and `.js`/`.css`/`.json`/`.webmanifest` are network-first. They
     use a 3 s timeout and `cache: 'no-cache'`, because GitHub Pages sends
     `max-age=600` and the plain HTTP cache would otherwise serve the old build.
@@ -295,6 +296,11 @@ Done:
 - Deployed and installed on the owner's iPhone. The first real save from the phone
   (`88beeba`, "Update colors from web app") confirmed the token flow and GitHub's
   CORS handling end to end.
+- Split cells for mixed actions (F17) and the double-tap zoom guard (F16).
+  F16 is in place, but the owner still needs to confirm on the iPhone that
+  zoom no longer triggers.
+- Frozen GTO snapshot in `web/gto/` with "Restore to GTO" in the editor (F18).
+- BB vs SB defense chart (`def.bb.vs.sb`) and the BB vs SB c-bet raise drill (F19).
 
 Next / open:
 - Workflow actions target Node 20, which GitHub has deprecated and now forces
@@ -327,6 +333,15 @@ Next / open:
   giving access to Practice and Edit for each position.
 - **Public site:** the repo is public, so the Pages URL is public too. Anyone with
   the link can see the charts. Only token holders can write.
+- **iOS app is legacy (2026-11-08):** all new work is web-only. New charts are not
+  added to the iOS manifest, so the iOS app no longer sees every chart.
+- **Mixed cells drawn split, not in a "mix" color:** each half shows a real
+  action, which is easier to read than a separate mixed color.
+- **GTO snapshot is a separate copy, not git history:** "Restore to GTO" needs a
+  fixed reference that phone edits can't move. It's re-frozen only on request.
+- **Drill raise rule is a simplified strategy:** the BB vs SB c-bet drill uses the
+  owner's rule set (two pair+; pair with no draws; double-backdoor bluffs without a
+  frontdoor), not solver frequencies. Draws only count if a hole card contributes.
 
 ## 10. How the web app was built (process)
 
