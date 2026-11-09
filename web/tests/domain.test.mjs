@@ -209,21 +209,21 @@ test('buildChart defaults missing fields to no entries (pure fold)', () => {
 
 // ---------------------- Loading all 23 charts ----------------------
 
-test('CHART_FILES hardcoded path list has 23 unique entries', () => {
-  assert.equal(CHART_FILES.length, 23);
-  assert.equal(new Set(CHART_FILES).size, 23);
+test('CHART_FILES hardcoded path list has 24 unique entries', () => {
+  assert.equal(CHART_FILES.length, 24);
+  assert.equal(new Set(CHART_FILES).size, 24);
 });
 
-test('every one of the 23 charts loads from disk and parses', async () => {
+test('every one of the 24 charts loads from disk and parses', async () => {
   const charts = await loadAllChartsFromDisk();
-  assert.equal(charts.length, 23);
+  assert.equal(charts.length, 24);
   for (const c of charts) {
     assert.ok(c.scenario, 'has scenario');
     assert.ok(c.entries instanceof Map, 'has entries map');
   }
   // All scenario keys unique.
   const keys = charts.map(c => c.scenario.key);
-  assert.equal(new Set(keys).size, 23);
+  assert.equal(new Set(keys).size, 24);
 });
 
 // ---------------------- AC1.4 cross-check numbers ----------------------
@@ -394,7 +394,7 @@ test('chartsForCategory("rfi") returns 5 RFI charts in UTG..BB action order', as
 test('chartsForCategory sorts defense by villain action order', async () => {
   const all = await loadAllChartsFromDisk();
   const list = chartsForCategory('bbDefense', all);
-  assert.deepEqual(list.map(c => c.scenario.villain), ['UTG','CO','BTN']);
+  assert.deepEqual(list.map(c => c.scenario.villain), ['UTG','CO','BTN','SB']);
 });
 
 test('chartsForCategory vs3bet puts ip before oop', async () => {

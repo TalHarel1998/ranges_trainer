@@ -350,3 +350,75 @@ path `web/palette.json`.
   file text is the snapshot file byte for byte.
 - AC18.4 The service worker precaches the 23 GTO files, so Restore works offline
   (the commit itself needs a connection).
+
+### F19 — BB vs SB flop c-bet raise drill
+
+Practice the simplified BB raising strategy vs an SB c-bet on the flop.
+
+**Dealing**
+- AC19.1 Hero hand: 2 cards drawn uniformly from the 52-card deck, redrawn until
+  the hand class is one the BB continues with in chart `def.bb.vs.sb`
+  (pure `call` or any mixed action; never pure `3bet`, never fold). This weights
+  hands by combos, like real dealing.
+- AC19.2 Flop: 3 cards drawn uniformly from the remaining 50. All 5 cards distinct.
+- AC19.3 The dealing function takes an injectable random source so tests are
+  deterministic.
+
+**Hand evaluation** (pure module `web/js/postflop.js`, Node-testable). Let
+H = hero's 2 cards, B = 3 board cards, ranks 2..A with A also low for straights.
+- AC19.4 *Hero pair*: H is a pocket pair, or a hole card's rank appears on B.
+  A pair made only by the board does not count.
+- AC19.5 *Two pair or better* (hero-made, any of):
+  set/trips — some rank appears ≥3 times in H∪B including at least one hole card
+  (covers sets, trips, full houses, quads); two pair — the two hole cards have
+  different ranks and both ranks are on B; straight — a 5-rank window (A2345 …
+  TJQKA) fully covered by H∪B ranks with hero contribution (below); flush — 5
+  cards of one suit. A paired board plus one hero pair (e.g. 77 on K♠K♦6♣) is
+  one pair, not two pair.
+- AC19.6 *Hero contribution* to a straight window W: W contains a rank held by a
+  hole card that is not on B. (Straights that need no hole card don't count.)
+- AC19.7 *Frontdoor straight draw*: no made straight, and some window W misses
+  exactly 1 rank of H∪B ranks, with hero contribution. Includes gutshots.
+- AC19.8 *Backdoor straight draw*: no made straight, and some window W misses
+  exactly 2 ranks of H∪B ranks, with hero contribution. (Evaluated independently
+  of frontdoor.)
+- AC19.9 *Frontdoor flush draw*: some suit has exactly 4 cards in H∪B, at least
+  one of them a hole card. *Backdoor flush draw*: some suit has exactly 3 cards in
+  H∪B, at least one a hole card.
+- AC19.10 *Correct answer*:
+  1. Two pair or better → **Raise** ("Two pair or better — always raise").
+  2. Exactly one hero pair and no draw of any kind (no frontdoor or backdoor
+     flush/straight) → **Raise** ("Pair with no draws — hates a turn barrel").
+  3. One hero pair with any draw → **Don't raise** ("Pair with a draw — call").
+  4. No hero pair, backdoor flush AND backdoor straight, no frontdoor draw →
+     **Raise** ("Double backdoor bluff").
+  5. Otherwise → **Don't raise** ("No pair with a frontdoor draw — just call" or
+     "No pair, not a double backdoor — just call").
+- AC19.11 The evaluator returns `{ answer: 'raise'|'noRaise', rule: 1..5,
+  made: 'twoPairPlus'|'pair'|'noPair', draws: { fdFlush, fdStraight, bdFlush,
+  bdStraight } }` so the UI can explain it.
+- AC19.12 Reference cases (all must be unit tests), board K♦Q♦6♣:
+  K♠7♠ raise (1 pair, no draws); A♠K♣ no raise (pair + bd straight);
+  6♥5♥ raise (pair, no draws: 5-6 plus K-Q is not 3 cards of any straight,
+  and only 2 hearts); 9♣8♣ raise (bd flush + bd straight);
+  J♥T♥ no raise (OESD); A♦5♦ no raise (fd flush); 2♠2♥ raise (pair, no draws);
+  K♣Q♠ raise (two pair); 6♠6♥ raise (set). Plus: A♥5♣ on K♠K♣6♦ = no pair;
+  7♠7♥ on K♠K♦6♣ = one pair; board 9♠8♦7♣ with A♥2♥: the T/J backdoor straight
+  (needs no hole card) must NOT count; A♠2♠ on 4♦5♣K♥ = frontdoor (wheel gutshot);
+  flush made with two suited hole cards on a monotone flop = two pair or better.
+
+**UI**
+- AC19.13 Home has a row "BB vs SB c-bet drill" → `#/drill/bb-vs-sb`. Shown only
+  when chart `def.bb.vs.sb` is loaded.
+- AC19.14 The drill shows: "BB vs SB · SB c-bets" heading, hero's 2 cards and the
+  3 flop cards as card faces (rank + suit symbol; ♥♦ red, ♠♣ black, readable in
+  dark mode), the question "Raise?", and two large buttons **Raise** /
+  **Don't raise**.
+- AC19.15 After answering: the result (Correct / Wrong) with the right answer and
+  the reason text from AC19.10, plus what the hand has (e.g. "Pair · backdoor
+  straight"), and a **Next hand** button. Answer buttons are disabled until Next;
+  the button the user picked stays highlighted (class `picked`).
+- AC19.16 Session score "Correct N / M" and current streak, in memory only (reset
+  when leaving the page). Works offline (no network needed).
+- AC19.17 Fast taps on Raise / Don't raise / Next must not zoom (F16 guard) and
+  must not double-answer.

@@ -4,7 +4,7 @@ Read this first. It is the single place for how this repo works, current status,
 commands, and decisions. Keep it up to date when you change something that a future
 person or agent would need to know.
 
-Last updated: 2026-11-05 (split cells for mixed actions, no double-tap zoom).
+Last updated: 2026-11-08 (BB vs SB chart + c-bet raise drill).
 
 ## 1. What this repo is
 
@@ -101,7 +101,7 @@ put the full combo count of a mixed hand in the "mix" bucket.
 
 - Only fields whose hand set changed are rewritten. Unchanged fields keep their
   exact original text, and key order is preserved, so git diffs stay small.
-  Saving with no edits produces the identical file, which is tested for all 23 charts.
+  Saving with no edits produces the identical file, which is tested for every chart.
 - Rewritten fields use a compact canonical form: pairs first (`77+` for a run
   ending at AA), then suited by high card (`A2s+` for a run ending just below the
   high card), then offsuit, joined by `", "`. This is the same syntax the iOS
@@ -118,7 +118,7 @@ The in-app editor only edits existing charts. To add a new one:
 2. Add its path to **both** `web/js/charts.js` (`CHART_FILES`) and `web/sw.js`
    (`CHART_FILES`). Browsers can't list directories, and a file missing from
    `sw.js` won't work offline. Update the count in the test
-   `CHART_FILES ... has 23 unique entries`.
+   `CHART_FILES ... has 24 unique entries`. Also copy the file into `web/gto/` (its frozen GTO version; a test checks every chart has one).
 3. iOS: add a line to `BundledChartRepository.manifest` in
    `PreflopT/PreflopT/Data/ChartRepository.swift`.
 4. Run `node --test web/tests/*.test.mjs`, then push to `main`.
@@ -208,7 +208,7 @@ Without a token, the color pickers are disabled.
   `#/recall/<scenarioKey>`, `#/edit/<scenarioKey>`, `#/github`, `#/colors`,
   `#/rfi-colors` (Back → Colors), `#/rfi-colors/rfi` (opened from the RFI page;
   Back → RFI).
-- **Data loading:** at boot the app fetches all 23 chart files and `palette.json`
+- **Data loading:** at boot the app fetches all 24 chart files and `palette.json`
   as text, applies any pending writes (section 5), then parses them. A missing or
   invalid `palette.json` falls back to the built-in defaults in `colors.js`.
 - **Split cells for mixed actions (F17):** a mixed cell is drawn half and half:
@@ -224,7 +224,21 @@ Without a token, the color pickers are disabled.
   (`installDoubleTapGuard`) also cancels a tap that ends within 350 ms of the
   previous one and fires the click itself. Pinch-to-zoom still works; don't add
   `maximum-scale`/`user-scalable=no` to the viewport.
-- **Frozen GTO snapshot (F18):** `web/gto/` holds a frozen copy of all 23 charts
+- **BB vs SB c-bet drill (F19):** route `#/drill/bb-vs-sb`, Home row "BB vs SB
+  c-bet drill". It deals 2 random cards, re-dealt until the hand is one BB
+  continues with in `def.bb.vs.sb` (call or mixed, never pure 3-bet or fold),
+  then a random flop, and asks whether to raise the SB's c-bet. Rules live in
+  `js/postflop.js` (`evaluateCbetRaise`), in order:
+  1. two pair or better → raise;
+  2. one hero pair with no draw of any kind → raise;
+  3. one hero pair with any draw → don't raise;
+  4. no pair, backdoor flush + backdoor straight, no frontdoor draw → raise;
+  5. otherwise → don't raise.
+  Draws only count if a hole card contributes. Gutshots and wheel draws count as
+  frontdoor straights. Board-only pairs don't count as hero pairs. The reviewer
+  checked the evaluator against an independent one on all 25,989,600 possible
+  deals, with no answer disagreements. The score is in memory only.
+- **Frozen GTO snapshot (F18):** `web/gto/` holds a frozen copy of every chart
   (taken 2026-11-08, after commit 214247c, so it includes the phone edits to BTN
   vs UTG made before then). The editor's **Restore to GTO** button paints that
   version as an unsaved edit; Save commits it. The app never writes `web/gto/`.
@@ -236,7 +250,7 @@ Without a token, the color pickers are disabled.
   page scrolling.
 - **Service worker (`sw.js`):**
   - It precaches the app shell (including all `js/*` modules and `palette.json`),
-    the 23 charts and the icons. Add new modules to `APP_SHELL`.
+    the 24 charts and the icons. Add new modules to `APP_SHELL`.
   - Navigations and `.js`/`.css`/`.json`/`.webmanifest` are network-first. They
     use a 3 s timeout and `cache: 'no-cache'`, because GitHub Pages sends
     `max-age=600` and the plain HTTP cache would otherwise serve the old build.

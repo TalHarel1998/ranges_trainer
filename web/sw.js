@@ -2,7 +2,7 @@
 //
 // Caching strategy
 // ----------------
-// We precache the app shell + icons + all 23 chart JSONs so the app works
+// We precache the app shell + icons + all 24 chart JSONs so the app works
 // offline after one successful online visit. At runtime we split by request:
 //
 //   * Navigation requests, and GETs for .js / .css / .webmanifest / .json
@@ -36,6 +36,7 @@ const APP_SHELL = [
   './js/colors.js',
   './js/config.js',
   './js/github.js',
+  './js/postflop.js',
   './js/serialize.js',
   './js/store.js',
   './icons/apple-touch-icon.png',
@@ -57,6 +58,7 @@ const CHART_FILES = [
   'charts/defense/bb_vs_utg.json',
   'charts/defense/bb_vs_co.json',
   'charts/defense/bb_vs_btn.json',
+  'charts/defense/bb_vs_sb.json',
   'charts/vs_3bet/utg_vs_ip.json',
   'charts/vs_3bet/utg_vs_oop.json',
   'charts/vs_3bet/co_vs_ip.json',

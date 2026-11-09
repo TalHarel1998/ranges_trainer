@@ -1,4 +1,4 @@
-// Hardcoded list of the 23 chart file paths plus a browser loader.
+// Hardcoded list of the 24 chart file paths plus a browser loader.
 //
 // Browsers can't list directories, so we ship the file list. Paths are all
 // relative to the HTML page and resolve through the `charts` symlink
@@ -23,6 +23,7 @@ export const CHART_FILES = Object.freeze([
   'charts/defense/bb_vs_utg.json',
   'charts/defense/bb_vs_co.json',
   'charts/defense/bb_vs_btn.json',
+  'charts/defense/bb_vs_sb.json',
 
   // vs 3-Bet (6)
   'charts/vs_3bet/utg_vs_ip.json',

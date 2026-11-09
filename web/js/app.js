@@ -33,6 +33,7 @@ import {
   testConnection, testWriteAccess, getFile, putFile, GitHubError,
 } from './github.js';
 import { chartToFileJSON } from './serialize.js';
+import { dealDrillHand, evaluateCbetRaise, describeHand } from './postflop.js';
 
 // ------------------- DOM helpers -------------------
 
@@ -371,6 +372,16 @@ function renderHome(root) {
     ]),
     h('div', { class: 'row-chev' }, '›'),
   ]));
+  // AC19.13: BB vs SB flop c-bet drill, visible only when the chart is loaded.
+  if (state.chartByKey.has('def.bb.vs.sb')) {
+    list.appendChild(h('a', { class: 'row', href: '#/drill/bb-vs-sb' }, [
+      h('div', { class: 'row-main' }, [
+        h('div', { class: 'row-title' }, 'BB vs SB c-bet drill'),
+        h('div', { class: 'row-sub' }, 'Decide whether to raise an SB flop c-bet'),
+      ]),
+      h('div', { class: 'row-chev' }, '›'),
+    ]));
+  }
   const hasToken = !!getToken();
   list.appendChild(h('a', { class: 'row', href: '#/github' }, [
     h('div', { class: 'row-main' }, [
@@ -1143,6 +1154,149 @@ function renderGitHubPage(root) {
   root.appendChild(page('GitHub', '#/', [form]));
 }
 
+// ------------------- Drill: BB vs SB c-bet raise (F19) -------------------
+
+function renderDrillBbVsSb(root) {
+  const chart = state.chartByKey.get('def.bb.vs.sb');
+  if (!chart) {
+    renderError(root, 'BB vs SB chart is not loaded.');
+    return;
+  }
+
+  // Session state (AC19.16: in-memory, cleared when leaving the page).
+  const session = { total: 0, correct: 0, streak: 0, lastAnswer: null };
+  // AC19.17: in-flight / answered guards prevent double-answering a hand.
+  let answered = false;
+  let answerInFlight = false;
+  let currentDeal = null;
+  let currentResult = null;
+
+  // Containers so partial updates can repaint without rebuilding the whole page.
+  const scoreEl    = h('div', { class: 'drill-score' });
+  const cardsEl    = h('div', { class: 'drill-cards' });
+  const feedbackEl = h('div', { class: 'drill-feedback' });
+  const answersEl  = h('div', { class: 'drill-answers' });
+
+  function newDeal() {
+    answered = false;
+    answerInFlight = false;
+    currentDeal = dealDrillHand(chart);
+    currentResult = evaluateCbetRaise(currentDeal.hero, currentDeal.board);
+    renderCards();
+    renderAnswers();
+    renderFeedback();
+  }
+
+  function renderCards() {
+    clear(cardsEl);
+    cardsEl.appendChild(h('div', { class: 'drill-label' }, 'Your hand'));
+    const hero = h('div', { class: 'drill-hand' });
+    for (const c of currentDeal.hero) hero.appendChild(cardFaceEl(c));
+    cardsEl.appendChild(hero);
+    cardsEl.appendChild(h('div', { class: 'drill-label' }, 'Flop'));
+    const board = h('div', { class: 'drill-hand' });
+    for (const c of currentDeal.board) board.appendChild(cardFaceEl(c));
+    cardsEl.appendChild(board);
+  }
+
+  function renderAnswers() {
+    clear(answersEl);
+    const raise = h('button', { class: 'btn btn-primary btn-large' }, 'Raise');
+    const call  = h('button', { class: 'btn btn-large' }, "Don't raise");
+    if (answered) {
+      // AC19.15: answer buttons disabled after answering, until Next. The
+      // button the user picked stays highlighted.
+      raise.setAttribute('disabled', '');
+      call.setAttribute('disabled', '');
+      (session.lastAnswer === 'raise' ? raise : call).classList.add('picked');
+    } else {
+      raise.addEventListener('click', () => submit('raise'));
+      call.addEventListener('click',  () => submit('noRaise'));
+    }
+    answersEl.appendChild(raise);
+    answersEl.appendChild(call);
+  }
+
+  function renderFeedback() {
+    clear(feedbackEl);
+    if (!answered) return;
+    const correct = currentResult.answer;
+    const picked = session.lastAnswer;
+    const isCorrect = picked === correct;
+    const correctLabel = correct === 'raise' ? 'Raise' : "Don't raise";
+    const { handDesc, reason } = describeHand(currentResult);
+
+    feedbackEl.appendChild(h('div', {
+      class: 'drill-result ' + (isCorrect ? 'drill-right' : 'drill-wrong'),
+    }, isCorrect ? 'Correct' : 'Wrong'));
+    feedbackEl.appendChild(h('div', { class: 'drill-answer' }, [
+      h('span', { class: 'drill-answer-label' }, 'Right answer: '),
+      h('strong', {}, correctLabel),
+    ]));
+    feedbackEl.appendChild(h('div', { class: 'drill-reason' }, reason));
+    feedbackEl.appendChild(h('div', { class: 'drill-handdesc' }, handDesc));
+
+    const next = h('button', { class: 'btn btn-primary btn-large' }, 'Next hand');
+    next.addEventListener('click', () => { newDeal(); updateScore(); });
+    feedbackEl.appendChild(h('div', { class: 'actions' }, [next]));
+  }
+
+  function submit(answer) {
+    // AC19.17: guard against double-answer (fast double-tap or re-entrancy).
+    if (answered || answerInFlight) return;
+    answerInFlight = true;
+    answered = true;
+    session.lastAnswer = answer;
+    session.total++;
+    if (answer === currentResult.answer) {
+      session.correct++;
+      session.streak++;
+    } else {
+      session.streak = 0;
+    }
+    updateScore();
+    renderAnswers();
+    renderFeedback();
+    answerInFlight = false;
+  }
+
+  function updateScore() {
+    clear(scoreEl);
+    scoreEl.appendChild(document.createTextNode(
+      `Correct ${session.correct} / ${session.total} · Streak ${session.streak}`
+    ));
+  }
+
+  clear(root);
+  root.appendChild(page('BB vs SB · SB c-bets', '#/', [
+    scoreEl,
+    cardsEl,
+    h('div', { class: 'drill-question' }, 'Raise?'),
+    answersEl,
+    feedbackEl,
+  ]));
+
+  updateScore();
+  newDeal();
+}
+
+function cardFaceEl(card) {
+  const suitSymbol = { s: '\u2660', h: '\u2665', d: '\u2666', c: '\u2663' }[card.suit];
+  const red = card.suit === 'h' || card.suit === 'd';
+  const face = h('div', {
+    class: 'card-face ' + (red ? 'card-red' : 'card-black'),
+    'aria-label': `${card.rank} of ${suitName(card.suit)}`,
+  }, [
+    h('span', { class: 'card-rank' }, card.rank),
+    h('span', { class: 'card-suit' }, suitSymbol),
+  ]);
+  return face;
+}
+
+function suitName(s) {
+  return { s: 'spades', h: 'hearts', d: 'diamonds', c: 'clubs' }[s] || s;
+}
+
 // ------------------- Editor -------------------
 
 function actionsForChartType(chartType) {
@@ -1539,6 +1693,7 @@ function parseHash() {
     case 'recall':      return { name: 'recall', key: parts.slice(1).join('/') };
     case 'edit':        return { name: 'edit', key: parts.slice(1).join('/') };
     case 'github':      return { name: 'github' };
+    case 'drill':       return { name: 'drill', id: parts[1] };
     default:            return { name: 'home' };
   }
 }
@@ -1586,6 +1741,11 @@ function route(root) {
       const sc = parseScenarioKey(r.key || '');
       if (!sc) { renderError(root, `Invalid scenario key: ${r.key}`); return; }
       renderEditor(root, sc);
+      break;
+    }
+    case 'drill': {
+      if (r.id === 'bb-vs-sb') { renderDrillBbVsSb(root); break; }
+      renderError(root, `Unknown drill: ${r.id}`);
       break;
     }
     default: renderHome(root);
