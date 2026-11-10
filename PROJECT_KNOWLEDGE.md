@@ -225,8 +225,12 @@ Without a token, the color pickers are disabled.
   (`installDoubleTapGuard`) also cancels a tap that ends within 350 ms of the
   previous one and fires the click itself. Pinch-to-zoom still works; don't add
   `maximum-scale`/`user-scalable=no` to the viewport.
-- **BB vs SB c-bet drill (F19):** route `#/drill/bb-vs-sb`, Home row "BB vs SB
-  c-bet drill". It deals 2 random cards, re-dealt until the hand is one BB
+- **Navigation:** Home is a menu: Preflop Charts (`#/preflop`, the chart
+  categories), Drills (`#/drills`), Colors, GitHub. Category and RFI pages go
+  back to `#/preflop`; drills go back to `#/drills`.
+- **BB vs SB c-bet drill (F19):** route `#/drill/bb-vs-sb`, row "BB vs SB
+  c-bet drill" on the Drills page. Flop is shown above the hero's hand; the
+  content is pushed down 10vh (`.drill-offset`). It deals 2 random cards, re-dealt until the hand is one BB
   continues with in `def.bb.vs.sb` (call or mixed, never pure 3-bet or fold),
   then a random flop, and asks whether to raise the SB's c-bet. Rules live in
   `js/postflop.js` (`evaluateCbetRaise`), in order:

@@ -76,11 +76,13 @@ When this spec is silent, match the Swift behavior.
 
 ### F2 — Home
 - AC2.1 Title "GG 6-Max Cash Ranges".
-- AC2.2 Categories in order: RFI, BTN defense, SB defense, BB defense,
+- AC2.2 Home is a menu with four rows, in order: **Preflop Charts** (`#/preflop`),
+  **Drills** (`#/drills`), **Colors** (`#/colors`), **GitHub** (`#/github`).
+  The Preflop Charts page (back → Home) lists the categories in order: RFI, BTN defense, SB defense, BB defense,
   UTG vs 3-Bet, CO vs 3-Bet, BTN vs 3-Bet, SB vs 3-Bet, BTN vs 4-Bet, SB vs 4-Bet.
   Categories with zero charts are hidden.
 - AC2.3 RFI subtitle "Unified — all positions"; others "N chart(s)".
-- AC2.4 A "Colors" entry links to settings (F7).
+- AC2.4 Category pages and the unified RFI page go back to `#/preflop`.
 
 ### F3 — Category list
 - AC3.1 Defense sorted by villain action order; vs 3-bet: ip before oop;
@@ -408,12 +410,13 @@ H = hero's 2 cards, B = 3 board cards, ranks 2..A with A also low for straights.
   flush made with two suited hole cards on a monotone flop = two pair or better.
 
 **UI**
-- AC19.13 Home has a row "BB vs SB c-bet drill" → `#/drill/bb-vs-sb`. Shown only
-  when chart `def.bb.vs.sb` is loaded.
-- AC19.14 The drill shows: "BB vs SB · SB c-bets" heading, hero's 2 cards and the
-  3 flop cards as card faces (rank + suit symbol; ♥♦ red, ♠♣ black, readable in
+- AC19.13 The Drills page (`#/drills`) has a row "BB vs SB c-bet drill" →
+  `#/drill/bb-vs-sb`. Shown only when chart `def.bb.vs.sb` is loaded. The drill's
+  back link goes to `#/drills`.
+- AC19.14 The drill shows: "BB vs SB · SB c-bets" heading, the 3 flop cards above
+  hero's 2 cards as card faces (rank + suit symbol; ♥♦ red, ♠♣ black, readable in
   dark mode), the question "Raise?", and two large buttons **Raise** /
-  **Don't raise**.
+  **Don't raise**. The drill content starts 10vh lower than other pages.
 - AC19.15 After answering: the result (Correct / Wrong) with the right answer and
   the reason text from AC19.10, plus what the hand has (e.g. "Pair · backdoor
   straight"), and a **Next hand** button. Answer buttons are disabled until Next;

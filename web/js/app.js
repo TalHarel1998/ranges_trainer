@@ -348,7 +348,30 @@ function renderError(root, message) {
   ]));
 }
 
+function navRow(href, title, sub) {
+  return h('a', { class: 'row', href }, [
+    h('div', { class: 'row-main' }, [
+      h('div', { class: 'row-title' }, title),
+      h('div', { class: 'row-sub' }, sub),
+    ]),
+    h('div', { class: 'row-chev' }, '›'),
+  ]);
+}
+
+// Home is a short menu; preflop charts and drills each have their own page.
 function renderHome(root) {
+  const list = h('div', { class: 'list' });
+  list.appendChild(navRow('#/preflop', 'Preflop Charts', 'RFI, defense, vs 3-bet, vs 4-bet'));
+  list.appendChild(navRow('#/drills', 'Drills', 'Practice postflop decisions'));
+  list.appendChild(navRow('#/colors', 'Colors', 'Edit action and ring colors'));
+  const hasToken = !!getToken();
+  list.appendChild(navRow('#/github', 'GitHub',
+    hasToken ? 'Connected — can edit charts' : 'Add a token to edit charts'));
+  clear(root);
+  root.appendChild(page('GG 6-Max Cash Ranges', null, [list]));
+}
+
+function renderPreflop(root) {
   const list = h('div', { class: 'list' });
   for (const cat of CATEGORIES) {
     const charts = chartsForCategory(cat.id, state.allCharts);
@@ -357,42 +380,23 @@ function renderHome(root) {
       ? 'Unified — all positions'
       : `${charts.length} chart${charts.length === 1 ? '' : 's'}`;
     const href = cat.id === 'rfi' ? '#/rfi' : `#/category/${cat.id}`;
-    list.appendChild(h('a', { class: 'row', href }, [
-      h('div', { class: 'row-main' }, [
-        h('div', { class: 'row-title' }, cat.title),
-        h('div', { class: 'row-sub' }, subtitle),
-      ]),
-      h('div', { class: 'row-chev' }, '›'),
-    ]));
+    list.appendChild(navRow(href, cat.title, subtitle));
   }
-  list.appendChild(h('a', { class: 'row', href: '#/colors' }, [
-    h('div', { class: 'row-main' }, [
-      h('div', { class: 'row-title' }, 'Colors'),
-      h('div', { class: 'row-sub' }, 'Edit action and ring colors'),
-    ]),
-    h('div', { class: 'row-chev' }, '›'),
-  ]));
-  // AC19.13: BB vs SB flop c-bet drill, visible only when the chart is loaded.
-  if (state.chartByKey.has('def.bb.vs.sb')) {
-    list.appendChild(h('a', { class: 'row', href: '#/drill/bb-vs-sb' }, [
-      h('div', { class: 'row-main' }, [
-        h('div', { class: 'row-title' }, 'BB vs SB c-bet drill'),
-        h('div', { class: 'row-sub' }, 'Decide whether to raise an SB flop c-bet'),
-      ]),
-      h('div', { class: 'row-chev' }, '›'),
-    ]));
-  }
-  const hasToken = !!getToken();
-  list.appendChild(h('a', { class: 'row', href: '#/github' }, [
-    h('div', { class: 'row-main' }, [
-      h('div', { class: 'row-title' }, 'GitHub'),
-      h('div', { class: 'row-sub' }, hasToken ? 'Connected — can edit charts' : 'Add a token to edit charts'),
-    ]),
-    h('div', { class: 'row-chev' }, '›'),
-  ]));
-
   clear(root);
-  root.appendChild(page('GG 6-Max Cash Ranges', null, [list]));
+  root.appendChild(page('Preflop Charts', '#/', [list]));
+}
+
+function renderDrills(root) {
+  const list = h('div', { class: 'list' });
+  // AC19.13: BB vs SB flop c-bet drill, listed only when the chart is loaded.
+  if (state.chartByKey.has('def.bb.vs.sb')) {
+    list.appendChild(navRow('#/drill/bb-vs-sb', 'BB vs SB c-bet drill',
+      'Decide whether to raise an SB flop c-bet'));
+  } else {
+    list.appendChild(h('div', { class: 'row-sub' }, 'No drills available.'));
+  }
+  clear(root);
+  root.appendChild(page('Drills', '#/', [list]));
 }
 
 // The mixed action a defense chart's "mix" pill should show, chosen the same
@@ -504,7 +508,7 @@ function renderCategory(root, categoryId) {
     list.appendChild(h('div', { class: 'empty' }, 'No charts available.'));
   }
   clear(root);
-  root.appendChild(page(cat.title, '#/', [list]));
+  root.appendChild(page(cat.title, '#/preflop', [list]));
 }
 
 function renderChartDetail(root, scenario) {
@@ -575,7 +579,7 @@ function backHrefForScenario(scenario) {
   if (scenario.kind === 'defense') return `#/category/${scenario.hero.toLowerCase()}Defense`;
   if (scenario.kind === 'vs3bet') return `#/category/${scenario.hero.toLowerCase()}Vs3bet`;
   if (scenario.kind === 'vs4bet') return `#/category/${scenario.hero.toLowerCase()}Vs4bet`;
-  return '#/';
+  return '#/preflop';
 }
 
 function renderUnifiedRFI(root) {
@@ -638,7 +642,7 @@ function renderUnifiedRFI(root) {
   const rfiColors = h('a', { class: 'btn', href: '#/rfi-colors/rfi' }, 'Edit RFI Colors');
 
   clear(root);
-  root.appendChild(page('RFI', '#/', [
+  root.appendChild(page('RFI', '#/preflop', [
     h('div', { class: 'grid-wrap' }, [grid]),
     legend,
     h('div', { class: 'actions' }, [toggle, rfiColors]),
@@ -1189,14 +1193,14 @@ function renderDrillBbVsSb(root) {
 
   function renderCards() {
     clear(cardsEl);
-    cardsEl.appendChild(h('div', { class: 'drill-label' }, 'Your hand'));
-    const hero = h('div', { class: 'drill-hand' });
-    for (const c of currentDeal.hero) hero.appendChild(cardFaceEl(c));
-    cardsEl.appendChild(hero);
     cardsEl.appendChild(h('div', { class: 'drill-label' }, 'Flop'));
     const board = h('div', { class: 'drill-hand' });
     for (const c of currentDeal.board) board.appendChild(cardFaceEl(c));
     cardsEl.appendChild(board);
+    cardsEl.appendChild(h('div', { class: 'drill-label' }, 'Your hand'));
+    const hero = h('div', { class: 'drill-hand' });
+    for (const c of currentDeal.hero) hero.appendChild(cardFaceEl(c));
+    cardsEl.appendChild(hero);
   }
 
   function renderAnswers() {
@@ -1268,7 +1272,8 @@ function renderDrillBbVsSb(root) {
   }
 
   clear(root);
-  root.appendChild(page('BB vs SB · SB c-bets', '#/', [
+  root.appendChild(page('BB vs SB · SB c-bets', '#/drills', [
+    h('div', { class: 'drill-offset' }),
     scoreEl,
     cardsEl,
     h('div', { class: 'drill-question' }, 'Raise?'),
@@ -1685,6 +1690,8 @@ function parseHash() {
   if (!trimmed) return { name: 'home' };
   const parts = trimmed.split('/').filter(Boolean);
   switch (parts[0]) {
+    case 'preflop':     return { name: 'preflop' };
+    case 'drills':      return { name: 'drills' };
     case 'rfi':         return { name: 'rfi' };
     case 'colors':      return { name: 'colors' };
     case 'rfi-colors':  return { name: 'rfiColors', from: parts[1] };
@@ -1720,6 +1727,8 @@ function route(root) {
   }
   switch (r.name) {
     case 'home':      renderHome(root); break;
+    case 'preflop':   renderPreflop(root); break;
+    case 'drills':    renderDrills(root); break;
     case 'rfi':       renderUnifiedRFI(root); break;
     case 'colors':    renderColorsPage(root); break;
     case 'rfiColors': renderRFIColorsPage(root, r.from); break;

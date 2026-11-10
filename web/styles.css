@@ -500,6 +500,9 @@ input[type="color"] {
 
 /* ---------- Drill (F19 BB vs SB c-bet) ---------- */
 
+/* Pushes the drill content down 10% of the screen height. */
+.drill-offset { height: 10vh; }
+
 .drill-score {
   text-align: center;
   font-size: 13px;
