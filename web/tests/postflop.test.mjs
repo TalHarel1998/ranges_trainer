@@ -213,23 +213,29 @@ test('describeHand produces "Pair · backdoor straight" style text and the AC19.
   const r = evaluateCbetRaise(H('As','Kc'), B_KQ6);
   const { handDesc, reason } = describeHand(r);
   assert.equal(handDesc, 'Pair · backdoor straight');
-  assert.equal(reason, 'Pair with a draw — call');
+  assert.equal(reason, 'Pair with backdoors');
 });
 
 test('describeHand: rule-1 and rule-2 reasons match AC19.10 wording', () => {
   const set = describeHand(evaluateCbetRaise(H('6s','6h'), B_KQ6));
-  assert.equal(set.reason, 'Two pair or better — always raise');
+  assert.equal(set.reason, 'Two pair or better');
   assert.equal(set.handDesc, 'Two pair+');
   const pairDry = describeHand(evaluateCbetRaise(H('Ks','7s'), B_KQ6));
-  assert.equal(pairDry.reason, 'Pair with no draws — hates a turn barrel');
+  assert.equal(pairDry.reason, 'Pair with no backdoors');
   assert.equal(pairDry.handDesc, 'Pair');
 });
 
 test('describeHand: rule-4 double backdoor and rule-5 catch-all', () => {
   const dbd = describeHand(evaluateCbetRaise(H('9c','8c'), B_KQ6));
-  assert.equal(dbd.reason, 'Double backdoor bluff');
-  const fd = describeHand(evaluateCbetRaise(H('Jh','Th'), B_KQ6));
-  assert.match(fd.reason, /No pair/);
+  assert.equal(dbd.reason, 'Double backdoor');
+  const sd = describeHand(evaluateCbetRaise(H('Jh','Th'), B_KQ6));
+  assert.equal(sd.reason, 'Straight draw');
+  const fd = describeHand(evaluateCbetRaise(H('Ad','2d'), B_KQ6));
+  assert.equal(fd.reason, 'Flush draw');
+  const both = describeHand(evaluateCbetRaise(H('Jd','Td'), B_KQ6));
+  assert.equal(both.reason, 'Flush and straight draw');
+  const none = describeHand(evaluateCbetRaise(H('9h','8c'), B_KQ6));
+  assert.equal(none.reason, 'No raise combo');
 });
 
 // ---------------- Each of the 5 rules hit at least once ----------------

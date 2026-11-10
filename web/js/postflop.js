@@ -245,9 +245,8 @@ export function evaluateCbetRaise(hole, board) {
  *             (Two pair+ / Pair / No pair) and every draw present.
  *   reason:   the AC19.10 reason text for the rule that fired.
  *
- * Rule 5 has no reason text spelled out in AC19.10. The parenthetical
- * ("no pair: has a frontdoor draw, or lacks one of the two backdoors")
- * describes the catch-all case, so the reason text summarises that.
+ * Rule 5 names the frontdoor draw (flush, straight, or both) when there is
+ * one, otherwise "No raise combo".
  */
 export function describeHand(result) {
   const parts = [];
@@ -262,14 +261,18 @@ export function describeHand(result) {
 
   let reason;
   switch (result.rule) {
-    case 1: reason = 'Two pair or better — always raise'; break;
-    case 2: reason = 'Pair with no draws — hates a turn barrel'; break;
-    case 3: reason = 'Pair with a draw — call'; break;
-    case 4: reason = 'Double backdoor bluff'; break;
-    case 5: reason = result.made === 'noPair' && (result.draws.fdFlush || result.draws.fdStraight)
-      ? 'No pair with a frontdoor draw — just call'
-      : 'No pair, not a double backdoor — just call';
+    case 1: reason = 'Two pair or better'; break;
+    case 2: reason = 'Pair with no backdoors'; break;
+    case 3: reason = 'Pair with backdoors'; break;
+    case 4: reason = 'Double backdoor'; break;
+    case 5: {
+      const { fdFlush, fdStraight } = result.draws;
+      if (fdFlush && fdStraight) reason = 'Flush and straight draw';
+      else if (fdFlush) reason = 'Flush draw';
+      else if (fdStraight) reason = 'Straight draw';
+      else reason = 'No raise combo';
       break;
+    }
     default: reason = '';
   }
   return { handDesc, reason };

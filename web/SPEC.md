@@ -388,14 +388,15 @@ H = hero's 2 cards, B = 3 board cards, ranks 2..A with A also low for straights.
   one of them a hole card. *Backdoor flush draw*: some suit has exactly 3 cards in
   H∪B, at least one a hole card.
 - AC19.10 *Correct answer*:
-  1. Two pair or better → **Raise** ("Two pair or better — always raise").
+  1. Two pair or better → **Raise** ("Two pair or better").
   2. Exactly one hero pair and no draw of any kind (no frontdoor or backdoor
-     flush/straight) → **Raise** ("Pair with no draws — hates a turn barrel").
-  3. One hero pair with any draw → **Don't raise** ("Pair with a draw — call").
+     flush/straight) → **Raise** ("Pair with no backdoors").
+  3. One hero pair with any draw → **Don't raise** ("Pair with backdoors").
   4. No hero pair, backdoor flush AND backdoor straight, no frontdoor draw →
-     **Raise** ("Double backdoor bluff").
-  5. Otherwise → **Don't raise** ("No pair with a frontdoor draw — just call" or
-     "No pair, not a double backdoor — just call").
+     **Raise** ("Double backdoor").
+  5. Otherwise → **Don't raise** ("Flush draw", "Straight draw", or
+     "Flush and straight draw" when there is a frontdoor draw; otherwise
+     "No raise combo").
 - AC19.11 The evaluator returns `{ answer: 'raise'|'noRaise', rule: 1..5,
   made: 'twoPairPlus'|'pair'|'noPair', draws: { fdFlush, fdStraight, bdFlush,
   bdStraight } }` so the UI can explain it.
